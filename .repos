@@ -1,0 +1,9 @@
+repositories:
+  aimooe_ros2:
+    type: git
+    url: https://github.com/FaaiqMastyaga/aimooe_ros2.git
+    version: main
+  elfin_robot_ros2:
+    type: git
+    url: https://github.com/FaaiqMastyaga/elfin_robot_ros2.git
+    version: main
