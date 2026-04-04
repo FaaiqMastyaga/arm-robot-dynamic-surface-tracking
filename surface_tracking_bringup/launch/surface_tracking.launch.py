@@ -30,17 +30,15 @@ def generate_launch_description():
         )
     )
 
-    # Eye-to-Hand TF
-    eye_to_hand_tf = Node(
-        package='tf2_ros',
-        executable='static_transform_publisher',
-        name='base_alignment_tf',
-        arguments=['0', '0', '0', '0', '0', '0', 'robot_base', 'elfin_base_link'],
+    camera_aligner_node = Node(
+        package='surface_tracking_calibration',
+        executable='camera_aligner.py',
+        name='camera_aligner'
     )
 
     return LaunchDescription([
         aimooe_tracker_launch,
         elfin10_l_sim_launch,
         elfin10_l_basic_api_launch,
-        eye_to_hand_tf,
+        camera_aligner_node,
     ])
