@@ -8,6 +8,7 @@ from launch_ros.actions import Node
 def generate_launch_description():
     aimooe_ros2_dir = get_package_share_directory('aimooe_ros2')
     elfin10_l_ros2_moveit2_dir = get_package_share_directory('elfin10_l_ros2_moveit2')
+    calibration_dir = get_package_share_directory('surface_tracking_calibration')
 
     # Start the Physical Optical Tracker Sensor
     aimooe_tracker_launch = IncludeLaunchDescription(
@@ -30,15 +31,15 @@ def generate_launch_description():
         )
     )
 
-    camera_aligner_node = Node(
-        package='surface_tracking_calibration',
-        executable='camera_aligner.py',
-        name='camera_aligner'
+    camera_aligner_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(calibration_dir, 'launch', 'camera_aligner.launch.py')
+        )
     )
 
     return LaunchDescription([
         aimooe_tracker_launch,
         elfin10_l_sim_launch,
         elfin10_l_basic_api_launch,
-        camera_aligner_node,
+        camera_aligner_launch,
     ])
