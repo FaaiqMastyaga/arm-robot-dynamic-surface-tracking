@@ -31,9 +31,9 @@ def generate_launch_description():
         )
     )
 
-    camera_aligner_launch = IncludeLaunchDescription(
+    aligner_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(calibration_dir, 'launch', 'camera_aligner.launch.py')
+            os.path.join(calibration_dir, 'launch', 'aligner.launch.py')
         )
     )
 
@@ -41,5 +41,5 @@ def generate_launch_description():
         aimooe_tracker_launch,
         elfin10_l_sim_launch,
         elfin10_l_basic_api_launch,
-        camera_aligner_launch,
+        aligner_launch,
     ])
