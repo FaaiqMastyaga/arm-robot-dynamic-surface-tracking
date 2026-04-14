@@ -1,12 +1,28 @@
 camera_aligner:
   ros__parameters:
     tool_name: "robot_base"
-    
-    # Flat array of [X, Y, Z] for the 4 markers in meters
-    # Format: [x1, y1, z1, x2, y2, z2, x3, y3, z3, x4, y4, z4]
     cad_points: [
       -0.042426,  0.042426,  0.01785,
        0.022536,  0.044633,  0.02785,
        0.039030, -0.038751,  0.02285,
       -0.035200, -0.028035,  0.03285
+    ]
+
+target_aligner:
+  ros__parameters:
+    tool_name: "target_platform"
+    cad_points: [
+      -0.028284,  0.028284,  0.01785,
+       0.030659,  0.039497,  0.02785,
+       0.018839, -0.029497,  0.02285,
+      -0.043560, -0.011293,  0.03285
+    ]
+
+target_visualizer:
+  ros__parameters:
+    cad_points: [
+      -0.028284,  0.028284,  0.01785,
+       0.030659,  0.039497,  0.02785,
+       0.018839, -0.029497,  0.02285,
+      -0.043560, -0.011293,  0.03285
     ]

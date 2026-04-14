@@ -10,6 +10,7 @@ find_package(ament_cmake REQUIRED)
 find_package(rclpy REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(visualization_msgs REQUIRED)
 find_package(aimooe_msgs REQUIRED)
 # uncomment the following section in order to fill in
 # further dependencies manually.
@@ -29,12 +30,16 @@ endif()
 
 install(DIRECTORY
   config
+  meshes
   launch
   DESTINATION share/${PROJECT_NAME}/
 )
 
 install(PROGRAMS
   scripts/camera_aligner.py
+  scripts/target_aligner.py
+  scripts/camera_visualizer.py
+  scripts/target_visualizer.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
