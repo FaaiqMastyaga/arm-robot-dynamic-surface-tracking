@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(surface_tracking_calibration)
+project(surface_tracking_visualization)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
@@ -8,9 +8,7 @@ endif()
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclpy REQUIRED)
-find_package(tf2_ros REQUIRED)
-find_package(geometry_msgs REQUIRED)
-find_package(aimooe_msgs REQUIRED)
+find_package(visualization_msgs REQUIRED)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -25,14 +23,14 @@ if(BUILD_TESTING)
 endif()
 
 install(DIRECTORY
-  config
+  meshes
   launch
   DESTINATION share/${PROJECT_NAME}/
 )
 
 install(PROGRAMS
-  scripts/camera_aligner.py
-  scripts/target_aligner.py
+  scripts/camera_visualizer.py
+  scripts/target_visualizer.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

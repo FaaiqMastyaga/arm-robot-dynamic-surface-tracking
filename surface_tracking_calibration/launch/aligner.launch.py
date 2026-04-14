@@ -30,42 +30,7 @@ def generate_launch_description():
         respawn_delay=2.0
     )
 
-
-    camera_visualizer_node = Node(
-        package='surface_tracking_calibration',
-        executable='camera_visualizer.py',
-        name='camera_visualizer',
-        parameters=[config_dir],
-        output='screen',
-        respawn=True,
-        respawn_delay=2.0
-    )
-
-    target_visualizer_node = Node(
-        package='surface_tracking_calibration',
-        executable='target_visualizer.py',
-        name='target_visualizer',
-        parameters=[config_dir],
-        output='screen',
-        respawn=True,
-        respawn_delay=2.0
-    )
-
-    whiteboard_tf_node = Node(
-        package='tf2_ros',
-        executable='static_transform_publisher',
-        name='whiteboard_tf_publisher',
-        arguments=[
-            '0.01', '0.0', '-0.11', 
-            '-1.57', '0.0', '1.57', 
-            'target_platform_aligned', 'whiteboard'
-        ],
-    )
-
     return LaunchDescription([
         camera_aligner_node,
         target_aligner_node,
-        camera_visualizer_node,
-        target_visualizer_node,
-        whiteboard_tf_node
     ])

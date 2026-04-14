@@ -34,7 +34,7 @@ class CameraVisualizer(Node):
         marker.action = Marker.ADD
 
         # Path to STL
-        marker.mesh_resource = "package://surface_tracking_calibration/meshes/aimooe_optical_tracker.stl"
+        marker.mesh_resource = "package://surface_tracking_visualization/meshes/aimooe_optical_tracker.stl"
 
         # Scale down from mm to meters
         marker.scale.x = 0.001

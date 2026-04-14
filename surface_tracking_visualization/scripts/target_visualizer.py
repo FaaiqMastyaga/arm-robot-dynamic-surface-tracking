@@ -73,7 +73,7 @@ class TargetVisualizer(Node):
         mesh_marker.action = Marker.ADD
 
         # The path to STL inside the ROS 2 package
-        mesh_marker.mesh_resource = "package://surface_tracking_calibration/meshes/target_platform_frame.stl"
+        mesh_marker.mesh_resource = "package://surface_tracking_visualization/meshes/target_platform_frame.stl"
 
         # to meters (multiply by 0.001) for RViz!
         mesh_marker.scale.x = 0.001
