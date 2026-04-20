@@ -20,7 +20,7 @@ class TargetVisualizer(Node):
         # Fetch Parameter from YAML
         self.target_cad_points = np.array(self.get_parameter('cad_points').get_parameter_value().double_array_value).reshape(-1, 3)
 
-        self.timer = self.create_timer(0.1, self.publish_markers)
+        self.timer = self.create_timer(0.01, self.publish_markers)
         self.get_logger().info("Target Mesh and Spheres visualizer started.")
 
     def publish_markers(self):

@@ -11,7 +11,7 @@ class CameraVisualizer(Node):
         
         self.publisher_ = self.create_publisher(Marker, 'camera_mesh_marker', 10)
         
-        self.timer = self.create_timer(0.1, self.publish_marker)
+        self.timer = self.create_timer(0.01, self.publish_marker)
         
         self.get_logger().info("Aimooe Optical Tracker visualizer started.")
 
@@ -47,7 +47,7 @@ class CameraVisualizer(Node):
 
         roll = -1.57
         pitch = 0.0
-        yaw = 0.0
+        yaw = 3.14
         q = self.euler_to_quaternion(roll, pitch, yaw)
         
         marker.pose.orientation.x = q[0]

@@ -36,7 +36,7 @@ def generate_launch_description():
         name='whiteboard_tf_publisher',
         arguments=[
             '0.01', '0.0', '-0.11', 
-            '-1.57', '0.0', '1.57', 
+            '3.14', '0.0', '1.57', 
             'target_platform_aligned', 'whiteboard'
         ],
     )
