@@ -50,20 +50,27 @@ class CameraAligner(Node):
 
         return rotation, translation, rms_error
 
-    def auto_register(self, unordered_camera_points):
+    def auto_register(self, valid_camera_points):
         """ Tests all 24 permutations to find the lowest RMS error """
         min_error = float('inf')
         best_rot = None
         best_trans = None
 
-        for perm in itertools.permutations(unordered_camera_points):
-            perm_array = np.array(perm)
-            rot, trans, error = self.calculate_transform(self.cad_points, perm_array)
+        num_pts = len(valid_camera_points)
 
-            if error < min_error:
-                min_error = error
-                best_rot = rot
-                best_trans = trans
+        cad_combinations = list(itertools.permutations(self.cad_points, num_pts))
+
+        for cad_subset in cad_combinations:
+            cad_subset_array = np.array(cad_subset)
+
+            for perm in itertools.permutations(valid_camera_points):
+                perm_array = np.array(perm)
+                rot, trans, error = self.calculate_transform(cad_subset_array, perm_array)
+
+                if error < min_error:
+                    min_error = error
+                    best_rot = rot
+                    best_trans = trans
 
         return best_rot, best_trans, min_error
 
@@ -71,18 +78,18 @@ class CameraAligner(Node):
         for tool in msg.tools:
             if tool.tool_name == self.tool_name:
                 
-                # Make sure the camera can see all 4 spheres
-                if len(tool.marker_points) == 4:
-                    
-                    # Convert incoming mm to meters!
-                    camera_points = []
-                    for pt in tool.marker_points:
-                        camera_points.append([pt.x / 1000.0, pt.y / 1000.0, pt.z / 1000.0])
-                    
-                    camera_points = np.array(camera_points)
+                # Filter out dropped (0,0,0) markers
+                valid_camera_points = []
+                for pt in tool.marker_points:
+                    if not (pt.x == 0.0 and pt.y == 0.0 and pt.z == 0.0):
+                        valid_camera_points.append([pt.x/1000.0, pt.y/1000.0, pt.z/1000.0])  # Convert mm to meters
 
+                # Only proceed if we have the minimum 3 points required for 6-DOF
+                if len(valid_camera_points) >= 3:
+                    valid_camera_points = np.array(valid_camera_points)
+                    
                     # Run SVD Permutation
-                    rot, trans, error = self.auto_register(camera_points)
+                    rot, trans, error = self.auto_register(valid_camera_points)
 
                     # Only publish if the error is low (e.g., less than 2cm)
                     # This prevents wild jumping if a sphere is partially blocked
@@ -95,7 +102,7 @@ class CameraAligner(Node):
                         trans_inv = rot_inv.apply(-trans)
 
                         t = TransformStamped()
-                        t.header.stamp = self.get_clock().now().to_msg()
+                        t.header.stamp = msg.header.stamp
                         t.header.frame_id = 'elfin_base_link'
                         t.child_frame_id = 'aimooe_camera_link'
 
