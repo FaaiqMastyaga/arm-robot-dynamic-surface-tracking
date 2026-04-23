@@ -5,7 +5,7 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     config_dir = os.path.join(
-        get_package_share_directory('surface_tracking_calibration'),
+        get_package_share_directory('surface_tracking_aligner'),
         'config',
         'marker_config.yaml'
     )

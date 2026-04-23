@@ -25,14 +25,11 @@ if(BUILD_TESTING)
 endif()
 
 install(DIRECTORY
-  config
   launch
   DESTINATION share/${PROJECT_NAME}/
 )
 
 install(PROGRAMS
-  scripts/camera_aligner.py
-  scripts/target_aligner.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
