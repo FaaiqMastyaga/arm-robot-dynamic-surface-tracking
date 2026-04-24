@@ -5,6 +5,7 @@
 #include <tf2_ros/buffer.h>
 #include <tf2_eigen/tf2_eigen.hpp>
 #include "aimooe_msgs/msg/tool_array.hpp"
+#include "surface_tracking_msgs/msg/alignment_telemetry.hpp"
 
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
@@ -53,6 +54,9 @@ public:
             std::bind(&RigidBodyAligner::tool_info_callback, this, std::placeholders::_1)
         );
 
+        // --- Publisher ---
+        telemetry_pub = this->create_publisher<surface_tracking_msgs::msg::AlignmentTelemetry>("~/tracking_telemetry", 10);
+
         RCLCPP_INFO(this->get_logger(), "C++ Aligner Started for: %s | Camera Mode: %s", tool_name.c_str(), align_camera.c_str());
     }
 
@@ -65,6 +69,7 @@ private:
     std::unique_ptr<tf2_ros::Buffer> tf_buffer;
     std::unique_ptr<tf2_ros::TransformListener> tf_listener;
     rclcpp::Subscription<aimooe_msgs::msg::ToolArray>::SharedPtr tool_info_sub;
+    rclcpp::Publisher<surface_tracking_msgs::msg::AlignmentTelemetry>::SharedPtr telemetry_pub;
 
     // Kabsch algorithm implementation
     bool calculate_transform(const Eigen::MatrixXd& cad_pts, const Eigen::MatrixXd& cam_pts, Eigen::Isometry3d& transform_out, double& rms_error) {
@@ -146,7 +151,7 @@ private:
                         t_tool.header.stamp = msg->header.stamp;
                         t_tool.header.frame_id = "aimooe_camera_link";
                         t_tool.child_frame_id = tool_name + "_aligned";
-    
+                        
                         t_tool.transform.translation.x = T_cad_to_cam.translation().x();
                         t_tool.transform.translation.y = T_cad_to_cam.translation().y();
                         t_tool.transform.translation.z = T_cad_to_cam.translation().z();
@@ -156,9 +161,27 @@ private:
                         t_tool.transform.rotation.y = q_tool.y();
                         t_tool.transform.rotation.z = q_tool.z();
                         t_tool.transform.rotation.w = q_tool.w();
-    
+                        
                         tf_broadcaster->sendTransform(t_tool);
-    
+                        
+                        // Publish telemetry data
+                        surface_tracking_msgs::msg::AlignmentTelemetry telemetry_msg;
+                        telemetry_msg.header.stamp = msg->header.stamp;
+                        telemetry_msg.header.frame_id = tool_name;
+
+                        telemetry_msg.pose.position.x = T_cad_to_cam.translation().x();
+                        telemetry_msg.pose.position.y = T_cad_to_cam.translation().y();
+                        telemetry_msg.pose.position.z = T_cad_to_cam.translation().z();
+
+                        telemetry_msg.pose.orientation.x = q_tool.x();
+                        telemetry_msg.pose.orientation.y = q_tool.y();
+                        telemetry_msg.pose.orientation.z = q_tool.z();
+                        telemetry_msg.pose.orientation.w = q_tool.w();
+
+                        telemetry_msg.rms_error = rms_error;
+
+                        telemetry_pub->publish(telemetry_msg);
+
                         // 2. Camera Alignment Logic
                         if (!align_camera.empty()) {
                             Eigen::Isometry3d T_cam_to_cad = T_cad_to_cam.inverse();
