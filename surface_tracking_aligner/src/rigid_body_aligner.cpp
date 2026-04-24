@@ -3,7 +3,7 @@
 #include <tf2_ros/transform_broadcaster.h>
 #include <tf2_ros/transform_listener.h>
 #include <tf2_ros/buffer.h>
-#include <tf2_eigen/tf2_eigen.hpp> // REQUIRED for TF to Eigen conversion
+#include <tf2_eigen/tf2_eigen.hpp>
 #include "aimooe_msgs/msg/tool_array.hpp"
 
 #include <Eigen/Dense>
@@ -67,7 +67,7 @@ private:
     rclcpp::Subscription<aimooe_msgs::msg::ToolArray>::SharedPtr tool_info_sub;
 
     // Kabsch algorithm implementation
-    bool calculate_transform(const Eigen::MatrixXd& cad_pts, const Eigen::MatrixXd& cam_pts, Eigen::Isometry3d& transform_out) {
+    bool calculate_transform(const Eigen::MatrixXd& cad_pts, const Eigen::MatrixXd& cam_pts, Eigen::Isometry3d& transform_out, double& rms_error) {
         if (cad_pts.rows() != cam_pts.rows() || cad_pts.rows() < 3) return false;
 
         Eigen::RowVector3d centroid_cad = cad_pts.colwise().mean();
@@ -92,6 +92,20 @@ private:
         transform_out.setIdentity();
         transform_out.linear() = R;
         transform_out.translation() = t;
+
+        // Calulate RMS Error
+        double squared_error_sum = 0.0;
+        for (int i = 0; i < cad_pts.rows(); ++i) {
+            Eigen::Vector3d cad_v = cad_pts.row(i).transpose();
+            Eigen::Vector3d cam_v = cam_pts.row(i).transpose();
+
+            Eigen::Vector3d transformed_cad = R * cad_v + t;
+
+            squared_error_sum += (transformed_cad - cam_v).squaredNorm();
+        }
+
+        // Final RMSE
+        rms_error = std::sqrt(squared_error_sum / cad_pts.rows());
 
         return true;
     }
@@ -120,71 +134,77 @@ private:
                     }
 
                     Eigen::Isometry3d T_cad_to_cam;
-                    if (!calculate_transform(valid_cad_points, valid_cam_points, T_cad_to_cam)) {
+                    double rms_error = 0.0;
+
+                    if (!calculate_transform(valid_cad_points, valid_cam_points, T_cad_to_cam, rms_error)) {
                         return;
                     }
 
-                    // 1. Broadcast standard tool tracking
-                    geometry_msgs::msg::TransformStamped t_tool;
-                    t_tool.header.stamp = msg->header.stamp;
-                    t_tool.header.frame_id = "aimooe_camera_link";
-                    t_tool.child_frame_id = tool_name + "_aligned";
-
-                    t_tool.transform.translation.x = T_cad_to_cam.translation().x();
-                    t_tool.transform.translation.y = T_cad_to_cam.translation().y();
-                    t_tool.transform.translation.z = T_cad_to_cam.translation().z();
-
-                    Eigen::Quaterniond q_tool(T_cad_to_cam.linear());
-                    t_tool.transform.rotation.x = q_tool.x();
-                    t_tool.transform.rotation.y = q_tool.y();
-                    t_tool.transform.rotation.z = q_tool.z();
-                    t_tool.transform.rotation.w = q_tool.w();
-
-                    tf_broadcaster->sendTransform(t_tool);
-
-                    // 2. Camera Alignment Logic
-                    if (!align_camera.empty()) {
-                        Eigen::Isometry3d T_cam_to_cad = T_cad_to_cam.inverse();
-                        Eigen::Isometry3d final_camera_transform;
-
-                        if (align_camera == "direct") {
-                            final_camera_transform = T_cam_to_cad;
-
-                        } else if (align_camera == "pivot") {
-                            try {
-                                // Match the TF lookup to the exact camera timestamp
-                                geometry_msgs::msg::TransformStamped tf_msg = tf_buffer->lookupTransform(
-                                    "elfin_base_link", "elfin_end_link", msg->header.stamp, rclcpp::Duration::from_seconds(0.1));
-                                
-                                // Convert ROS msg to Eigen
-                                Eigen::Isometry3d T_ee_to_base = tf2::transformToEigen(tf_msg);
-                                
-                                // T_base_camera = T_base_ee * T_ee_camera
-                                final_camera_transform = T_ee_to_base * T_cam_to_cad;
-                                
-                            } catch (const tf2::TransformException & ex) {
-                                RCLCPP_DEBUG(this->get_logger(), "Pivot TF Lookup failed: %s", ex.what());
-                                return;
+                    if (rms_error < 0.02) {
+                        // 1. Broadcast standard tool tracking
+                        geometry_msgs::msg::TransformStamped t_tool;
+                        t_tool.header.stamp = msg->header.stamp;
+                        t_tool.header.frame_id = "aimooe_camera_link";
+                        t_tool.child_frame_id = tool_name + "_aligned";
+    
+                        t_tool.transform.translation.x = T_cad_to_cam.translation().x();
+                        t_tool.transform.translation.y = T_cad_to_cam.translation().y();
+                        t_tool.transform.translation.z = T_cad_to_cam.translation().z();
+    
+                        Eigen::Quaterniond q_tool(T_cad_to_cam.linear());
+                        t_tool.transform.rotation.x = q_tool.x();
+                        t_tool.transform.rotation.y = q_tool.y();
+                        t_tool.transform.rotation.z = q_tool.z();
+                        t_tool.transform.rotation.w = q_tool.w();
+    
+                        tf_broadcaster->sendTransform(t_tool);
+    
+                        // 2. Camera Alignment Logic
+                        if (!align_camera.empty()) {
+                            Eigen::Isometry3d T_cam_to_cad = T_cad_to_cam.inverse();
+                            Eigen::Isometry3d final_camera_transform;
+    
+                            if (align_camera == "direct") {
+                                final_camera_transform = T_cam_to_cad;
+    
+                            } else if (align_camera == "pivot") {
+                                try {
+                                    // Match the TF lookup to the exact camera timestamp
+                                    geometry_msgs::msg::TransformStamped tf_msg = tf_buffer->lookupTransform(
+                                        "elfin_base_link", "elfin_end_link", msg->header.stamp, rclcpp::Duration::from_seconds(0.1));
+                                    
+                                    // Convert ROS msg to Eigen
+                                    Eigen::Isometry3d T_ee_to_base = tf2::transformToEigen(tf_msg);
+                                    
+                                    // T_base_camera = T_base_ee * T_ee_camera
+                                    final_camera_transform = T_ee_to_base * T_cam_to_cad;
+                                    
+                                } catch (const tf2::TransformException & ex) {
+                                    RCLCPP_DEBUG(this->get_logger(), "Pivot TF Lookup failed: %s", ex.what());
+                                    return;
+                                }
                             }
+    
+                            // Broadcast Camera Base
+                            geometry_msgs::msg::TransformStamped t_cam;
+                            t_cam.header.stamp = msg->header.stamp;
+                            t_cam.header.frame_id = "elfin_base_link";
+                            t_cam.child_frame_id = "aimooe_camera_link";
+    
+                            t_cam.transform.translation.x = final_camera_transform.translation().x();
+                            t_cam.transform.translation.y = final_camera_transform.translation().y();
+                            t_cam.transform.translation.z = final_camera_transform.translation().z();
+    
+                            Eigen::Quaterniond q_cam(final_camera_transform.linear());
+                            t_cam.transform.rotation.x = q_cam.x();
+                            t_cam.transform.rotation.y = q_cam.y();
+                            t_cam.transform.rotation.z = q_cam.z();
+                            t_cam.transform.rotation.w = q_cam.w();
+                            
+                            tf_broadcaster->sendTransform(t_cam);
                         }
-
-                        // Broadcast Camera Base
-                        geometry_msgs::msg::TransformStamped t_cam;
-                        t_cam.header.stamp = msg->header.stamp;
-                        t_cam.header.frame_id = "elfin_base_link";
-                        t_cam.child_frame_id = "aimooe_camera_link";
-
-                        t_cam.transform.translation.x = final_camera_transform.translation().x();
-                        t_cam.transform.translation.y = final_camera_transform.translation().y();
-                        t_cam.transform.translation.z = final_camera_transform.translation().z();
-
-                        Eigen::Quaterniond q_cam(final_camera_transform.linear());
-                        t_cam.transform.rotation.x = q_cam.x();
-                        t_cam.transform.rotation.y = q_cam.y();
-                        t_cam.transform.rotation.z = q_cam.z();
-                        t_cam.transform.rotation.w = q_cam.w();
-                        
-                        tf_broadcaster->sendTransform(t_cam);
+                    } else {
+                        RCLCPP_DEBUG(this->get_logger(), "Tracking skipped. RMS Error too high: %.4f m", rms_error);
                     }
                 }
             }
