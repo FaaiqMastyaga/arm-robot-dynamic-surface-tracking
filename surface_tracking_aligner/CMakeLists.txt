@@ -13,7 +13,7 @@ find_package(tf2_ros REQUIRED)
 find_package(tf2_eigen REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(aimooe_msgs REQUIRED)
-find_package(surface_tracking_msgs REQUIRED)
+find_package(surface_tracking_interfaces REQUIRED)
 find_package(Eigen3 REQUIRED)
 
 add_executable(rigid_body_aligner src/rigid_body_aligner.cpp)
@@ -28,7 +28,7 @@ ament_target_dependencies(rigid_body_aligner
   tf2_ros
   tf2_eigen
   aimooe_msgs
-  surface_tracking_msgs
+  surface_tracking_interfaces
 )
 
 install(DIRECTORY
