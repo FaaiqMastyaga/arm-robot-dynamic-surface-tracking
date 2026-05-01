@@ -124,7 +124,7 @@ private:
                 int iter_idx = 0;
                 for (auto const& pt : tool.marker_points) {
                     if (!(pt.x == 0.0 && pt.y == 0.0 && pt.z == 0.0)) {
-                        valid_cam_vec.push_back(Eigen::Vector3d(pt.x / 1000.0, pt.y / 1000.0, pt.z / 1000.0));
+                        valid_cam_vec.push_back(Eigen::Vector3d(pt.x, pt.y, pt.z));
                         valid_cad_vec.push_back(cad_points.row(iter_idx));
                     }
                     iter_idx++;
