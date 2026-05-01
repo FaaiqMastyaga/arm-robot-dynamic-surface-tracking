@@ -1,6 +1,8 @@
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 def generate_launch_description():
@@ -10,20 +12,23 @@ def generate_launch_description():
         'marker_config.yaml'
     )
 
-    camera_aligner_node = Node(
+    active_camera_arg = LaunchConfiguration('active_camera')
+    active_target_arg = LaunchConfiguration('active_target')
+
+    robot_base_node = Node(
         package='surface_tracking_aligner',
         executable='rigid_body_aligner',
-        name='camera_aligner',
+        name=active_camera_arg,
         parameters=[config_dir],
         output='screen',
         respawn=True,
         respawn_delay=2.0
     )
 
-    target_aligner_node = Node(
+    target_platform_node = Node(
         package='surface_tracking_aligner',
         executable='rigid_body_aligner',
-        name='target_aligner',
+        name=active_target_arg,
         parameters=[config_dir],
         output='screen',
         respawn=True,
@@ -31,6 +36,8 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
-        camera_aligner_node,
-        target_aligner_node,
+        DeclareLaunchArgument('active_camera', default_value='robot_base'),
+        DeclareLaunchArgument('active_target', default_value='target_platform'),
+        robot_base_node,
+        target_platform_node,
     ])
