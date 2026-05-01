@@ -1,0 +1,11 @@
+# Goal
+geometry_msgs/Point[] raw_pixels    # Raw pixel from canvas
+float32 canvas_scale_factor         # Pixels to meters conversion
+---
+# Result
+bool success
+string message
+---
+# Feedback
+float32 progress_percentage
+string current_state
