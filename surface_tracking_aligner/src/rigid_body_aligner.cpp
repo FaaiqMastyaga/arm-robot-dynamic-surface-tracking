@@ -5,7 +5,7 @@
 #include <tf2_ros/buffer.h>
 #include <tf2_eigen/tf2_eigen.hpp>
 #include "aimooe_msgs/msg/tool_array.hpp"
-#include "surface_tracking_msgs/msg/alignment_telemetry.hpp"
+#include "surface_tracking_interfaces/msg/alignment_telemetry.hpp"
 
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
@@ -55,7 +55,7 @@ public:
         );
 
         // --- Publisher ---
-        telemetry_pub = this->create_publisher<surface_tracking_msgs::msg::AlignmentTelemetry>("~/tracking_telemetry", 10);
+        telemetry_pub = this->create_publisher<surface_tracking_interfaces::msg::AlignmentTelemetry>("~/tracking_telemetry", 10);
 
         RCLCPP_INFO(this->get_logger(), "C++ Aligner Started for: %s | Camera Mode: %s", tool_name.c_str(), align_camera.c_str());
     }
@@ -69,7 +69,7 @@ private:
     std::unique_ptr<tf2_ros::Buffer> tf_buffer;
     std::unique_ptr<tf2_ros::TransformListener> tf_listener;
     rclcpp::Subscription<aimooe_msgs::msg::ToolArray>::SharedPtr tool_info_sub;
-    rclcpp::Publisher<surface_tracking_msgs::msg::AlignmentTelemetry>::SharedPtr telemetry_pub;
+    rclcpp::Publisher<surface_tracking_interfaces::msg::AlignmentTelemetry>::SharedPtr telemetry_pub;
 
     // Kabsch algorithm implementation
     bool calculate_transform(const Eigen::MatrixXd& cad_pts, const Eigen::MatrixXd& cam_pts, Eigen::Isometry3d& transform_out, double& rms_error) {
@@ -165,7 +165,7 @@ private:
                         tf_broadcaster->sendTransform(t_tool);
                         
                         // Publish telemetry data
-                        surface_tracking_msgs::msg::AlignmentTelemetry telemetry_msg;
+                        surface_tracking_interfaces::msg::AlignmentTelemetry telemetry_msg;
                         telemetry_msg.header.stamp = msg->header.stamp;
                         telemetry_msg.header.frame_id = tool_name;
 
