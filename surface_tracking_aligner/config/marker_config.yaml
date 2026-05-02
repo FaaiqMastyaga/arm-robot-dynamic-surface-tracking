@@ -1,4 +1,4 @@
-camera_aligner:
+robot_base:
   ros__parameters:
     tool_name: robot_base
     align_camera: direct
@@ -14,8 +14,23 @@ camera_aligner:
        -0.044714,  0.005000,  0.032850,
         0.000000, -0.055000,  0.022850,
     ]
+    marker_distances: [
+        0.000000,
+    ]
+    ordered_marker_distances: [
+        0.000000,
+    ]
 
-target_aligner:
+end_effector:
+  ros__parameters:
+    tool_name: end_effector
+    align_camera: pivot
+    cad_points: []
+    ordered_cad_points: []
+    marker_distances: []
+    ordered_marker_distances: []
+
+target_platform:
   ros__parameters:
     tool_name: target_platform
     align_camera: ''
@@ -31,12 +46,123 @@ target_aligner:
        -0.029497, -0.018839,  0.022850,
         0.039497, -0.030659,  0.027850,
     ]
+    marker_distances: [
+        0.000000,
+    ]
+    ordered_marker_distances: [
+        0.000000,
+    ]
 
-target_visualizer:
+target_platform_coplanar_3pt:
   ros__parameters:
+    tool_name: target_platform_coplanar_3pt
+    align_camera: ''
     cad_points: [
-       -0.011293,  0.043560,  0.032850,
-        0.028284,  0.028284,  0.017850,
-       -0.029497, -0.018839,  0.022850,
-        0.039497, -0.030659,  0.027850,
+        0.000000,  0.055000,  0.011300,
+        0.047619, -0.023935,  0.011300,
+       -0.032381, -0.027407,  0.011300,
+    ]
+    ordered_cad_points: []
+    marker_distances: [
+        0.000000,
+    ]
+    ordered_marker_distances: [
+        0.000000,
+    ]
+
+target_platform_noncoplanar_3pt:
+  ros__parameters:
+    tool_name: target_platform_noncoplanar_3pt
+    align_camera: ''
+    cad_points: [
+        0.000000,  0.055000,  0.011300,
+        0.047619, -0.023935,  0.016300,
+       -0.032381, -0.027407,  0.021300,
+    ]
+    ordered_cad_points: []
+    marker_distances: [
+        0.000000,
+    ]
+    ordered_marker_distances: [
+        0.000000,
+    ]
+
+target_platform_coplanar_4pt:
+  ros__parameters:
+    tool_name: target_platform_coplanar_4pt
+    align_camera: ''
+    cad_points: [
+        0.000000,  0.055000,  0.011300,
+        0.055158,  0.040627,  0.011300,
+        0.047619, -0.023935,  0.011300,
+       -0.032381, -0.027407,  0.011300,
+    ]
+    ordered_cad_points: []
+    marker_distances: [
+        0.000000,
+    ]
+    ordered_marker_distances: [
+        0.000000,
+    ]
+
+target_platform_noncoplanar_4pt:
+  ros__parameters:
+    tool_name: target_platform_noncoplanar_4pt
+    align_camera: ''
+    cad_points: [
+        0.000000,  0.055000,  0.011300,
+        0.055158,  0.040627,  0.011300,
+        0.047619, -0.023935,  0.016300,
+       -0.032381, -0.027407,  0.021300,
+    ]
+    ordered_cad_points: []
+    marker_distances: [
+        0.000000,
+    ]
+    ordered_marker_distances: [
+        0.000000,
+    ]
+
+target_platform_coplanar_5pt:
+  ros__parameters:
+    tool_name: target_platform_coplanar_5pt
+    align_camera: ''
+    cad_points: [
+        0.000000,  0.055000,  0.011300,
+        0.055158,  0.040627,  0.011300,
+        0.047619, -0.023935,  0.011300,
+       -0.032381, -0.027407,  0.011300,
+       -0.048481,  0.042770,  0.011300,
+    ]
+    ordered_cad_points: [
+        0.000000,  0.055000,  0.011300,
+        0.055158,  0.040627,  0.011300,
+       -0.048481,  0.042770,  0.011300,
+        0.047619, -0.023935,  0.011300,
+       -0.032381, -0.027407,  0.011300,
+    ]
+    marker_distances: [
+        0.000000,
+    ]
+    ordered_marker_distances: [
+        0.000000,
+    ]
+
+target_platform_noncoplanar_5pt:
+  ros__parameters:
+    tool_name: target_platform_noncoplanar_5pt
+    align_camera: ''
+    cad_points: [
+        0.000000,  0.055000,  0.011300,
+        0.055158,  0.040627,  0.011300,
+        0.047619, -0.023935,  0.016300,
+       -0.032381, -0.027407,  0.021300,
+       -0.048481,  0.042770,  0.011300,
+    ]
+    ordered_cad_points: []
+    marker_distances: [
+        0.000000,
+    ]
+    ordered_marker_distances: [
+        0.000000,
     ]
