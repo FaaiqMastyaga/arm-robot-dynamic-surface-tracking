@@ -25,9 +25,8 @@ def recursively_convert_to_flow(data):
     return data
 
 def format_yaml_grids(yaml_text):
-    """ Post-processes the YAML string to format lists into neat grids and separate root nodes """
-    # 1. Format the 3xN Grids (Your existing logic)
-    pattern = re.compile(r'^(\s*)(cad_points|ordered_cad_points):\s*\[(.*?)\]', re.MULTILINE | re.DOTALL)
+    # Fixed the regex to look for the correct keys
+    pattern = re.compile(r'^(\s*)(cad_points|ordered_cad_points|marker_distances|ordered_marker_distances):\s*\[(.*?)\]', re.MULTILINE | re.DOTALL)
     
     def replacer(match):
         indent = match.group(1)
@@ -36,9 +35,20 @@ def format_yaml_grids(yaml_text):
         
         numbers = [float(x) for x in numbers_str.replace('\n', '').split(',') if x.strip()]
         
+        if not numbers:
+            return f"{indent}{key}: []"
+
+        # If it's a 1D array, put it on one line
+        if key in ['marker_distances', 'ordered_marker_distances']:
+            row_str = ", ".join([f"{num: 9.6f}" for num in numbers])
+            return f"{indent}{key}: [\n{indent}   {row_str},\n{indent}]"
+            
+        # If it's the 3xN coordinates, format as a neat 3-column grid
         formatted_lines = []
-        for i in range(0, len(numbers), 3):
-            row = numbers[i:i+3]
+        cols = 3
+        
+        for i in range(0, len(numbers), cols):
+            row = numbers[i:i+cols]
             row_str = ", ".join([f"{num: 9.6f}" for num in row])
             formatted_lines.append(f"{indent}   {row_str},")
             
@@ -46,9 +56,6 @@ def format_yaml_grids(yaml_text):
         return f"{indent}{key}: [\n{grid_str}\n{indent}]"
 
     processed_yaml = pattern.sub(replacer, yaml_text)
-
-    # 2. Inject an empty line before any top-level hierarchy key
-    # Matches a newline followed by a word and a colon (no leading spaces)
     processed_yaml = re.sub(r'\n([a-zA-Z0-9_-]+:)', r'\n\n\1', processed_yaml)
 
     return processed_yaml
@@ -70,14 +77,12 @@ def parse_aimtool_file(filepath):
         raise FileNotFoundError(f"Cannot find aimtool file at: {filepath}")
     
     with open(filepath, 'r') as file:
-        # Strip whitespace and ignore empty lines
         lines = [line.strip() for line in file.readlines() if line.strip()]
 
     if len(lines) < 3:
         raise ValueError("The .aimtool file is empty or corrupted.")
 
     try:
-        # Line index 2 contains the number of markers
         num_markers = int(lines[2])
     except ValueError:
         raise ValueError(f"Expected integer on line 3 for marker count, got: {lines[2]}")
@@ -87,7 +92,6 @@ def parse_aimtool_file(filepath):
 
     cam_points = []
     
-    # Loop exactly 'num_markers' times starting from line 4 (index 3)
     for i in range(3, 3 + num_markers):
         parts = lines[i].split()
         if len(parts) < 3:
@@ -151,39 +155,47 @@ class CalibrationNode(Node):
         cad_signatures = get_geometric_signatures(unordered_cad)
         cam_signatures = get_geometric_signatures(cam_points)
 
-        matched_cad_indices = []
-        for cam_sig in cam_signatures:
-            best_match_idx = -1
-            lowest_diff = float('inf')
-            for i, cad_sig in enumerate(cad_signatures):
-                diff = np.sum(np.abs(cam_sig - cad_sig))
-                if diff < lowest_diff:
-                    lowest_diff = diff
-                    best_match_idx = i
-            matched_cad_indices.append(best_match_idx)
+        # Create a cost matrix
+        cost_matrix = np.zeros((expected_markers, expected_markers))
+        for i in range(expected_markers):
+            for j in range(expected_markers):
+                cost_matrix[i, j] = np.sum(np.abs(cam_signatures[i] - cad_signatures[j]))
 
-        # Symmetry Check
-        if len(set(matched_cad_indices)) != expected_markers:
-            self.get_logger().error("Geometric ambiguity detected. Are your CAD markers perfectly symmetrical?")
+        matched_cad_indices = [-1] * expected_markers
+        
+        # Enforce strict 1-to-1 matching
+        for _ in range(expected_markers):
+            min_idx = np.unravel_index(np.argmin(cost_matrix), cost_matrix.shape)
+            cam_idx, cad_idx = int(min_idx[0]), int(min_idx[1])
+            
+            matched_cad_indices[cam_idx] = cad_idx
+            cost_matrix[cam_idx, :] = float('inf')
+            cost_matrix[:, cad_idx] = float('inf')
+
+        if -1 in matched_cad_indices or len(set(matched_cad_indices)) != expected_markers:
+            self.get_logger().error("Critical error in 1-to-1 assignment matrix.")
             sys.exit(1)
 
         # 4. Reorder and write to YAML
         ordered_cad_points = unordered_cad[matched_cad_indices]
         yaml_array = [float(x) for x in ordered_cad_points.flatten()]
-
         config_data[node_name]['ros__parameters']['ordered_cad_points'] = yaml_array
 
-        # Convert lists to flow style
+        # 5. Handle Distances safely as a 1D Array
+        marker_distances = params.get('marker_distances', [])
+        if len(marker_distances) == expected_markers:
+            ordered_dists = [float(marker_distances[i]) for i in matched_cad_indices]
+            config_data[node_name]['ros__parameters']['ordered_marker_distances'] = ordered_dists
+        else:
+            if not marker_distances:
+                config_data[node_name]['ros__parameters']['marker_distances'] = [0.0]
+            config_data[node_name]['ros__parameters']['ordered_marker_distances'] = [0.0]
+
         config_data = recursively_convert_to_flow(config_data)
 
         try:
-            # 1. Dump to a string instead of directly to the file
             yaml_str = yaml.dump(config_data, default_flow_style=False, sort_keys=False)
-            
-            # 2. Run our custom grid formatter
             formatted_yaml_str = format_yaml_grids(yaml_str)
-
-            # 3. Write the beautifully formatted string to the file
             with open(yaml_path, 'w') as file:
                 file.write(formatted_yaml_str)
                 
