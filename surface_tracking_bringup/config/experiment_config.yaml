@@ -1,0 +1,20 @@
+global_experiment_manager:
+  ros__parameters:
+    # --- Active Hardware Definitions ---
+    active_camera_aligner: robot_base
+    active_target_platform: target_platform
+    marker_configuration: coplanar   # Options: coplanar, noncoplanar
+    marker_placement: perpendicular  # Options: parallel, perpendicular (relative to whiteboard platform) 
+    number_of_markers: 5
+    
+    # --- Canvas / Workspace Boundaries ---
+    canvas_width: 0.30   # 30 cm wide
+    canvas_height: 0.20  # 20 cm tall
+    
+    # --- Trajectory Parameters ---
+    drawing_feedrate: 0.05       # Meters per second
+    plunge_feedrate: 0.02        # Slower speed for lifting/plunging the pen
+    z_hover_height: 0.01         # 1 cm above the board when not drawing
+
+    # --- Control Loop Parameters ---
+    control_loop_rate: 50.0    # 50 Hz control loop
