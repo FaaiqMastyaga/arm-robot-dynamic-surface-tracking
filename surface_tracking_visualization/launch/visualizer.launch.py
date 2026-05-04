@@ -35,21 +35,9 @@ def generate_launch_description():
         respawn_delay=2.0
     )
 
-    whiteboard_tf_node = Node(
-        package='tf2_ros',
-        executable='static_transform_publisher',
-        name='whiteboard_tf_publisher',
-        arguments=[
-            '0.01', '0.0', '-0.11', 
-            '3.14', '0.0', '1.57', 
-            [active_target_arg, '_aligned'], 'whiteboard'
-        ],
-    )
-
     return LaunchDescription([
         DeclareLaunchArgument('active_camera', default_value='robot_base'),
         DeclareLaunchArgument('active_target', default_value='target_platform'),
         camera_visualizer_node,
         target_visualizer_node,
-        whiteboard_tf_node
     ])
