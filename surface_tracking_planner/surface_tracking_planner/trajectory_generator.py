@@ -16,16 +16,16 @@ class TrajectoryGenerator(Node):
         super().__init__('trajectory_backend_server')
 
         # --- Declare Parameters ---
-        self.declare_parameter('control_loop_rate_hz', 50.0)
-        self.declare_parameter('drawing_feedrate_m_s', 0.025)
-        self.declare_parameter('plunge_feedrate_m_s', 0.02)
+        self.declare_parameter('control_loop_rate', 50.0)
+        self.declare_parameter('drawing_feedrate', 0.025)
+        self.declare_parameter('plunge_feedrate', 0.02)
 
         # --- Get Parameters ---
-        self.control_rate_hz = self.get_parameter('control_loop_rate_hz').get_parameter_value().double_value
-        self.drawing_feedrate_m_s = self.get_parameter('drawing_feedrate_m_s').get_parameter_value().double_value
-        self.plunge_feedrate_m_s = self.get_parameter('plunge_feedrate_m_s').get_parameter_value().double_value
+        self.control_rate = self.get_parameter('control_loop_rate').get_parameter_value().double_value
+        self.drawing_feedrate = self.get_parameter('drawing_feedrate').get_parameter_value().double_value
+        self.plunge_feedrate = self.get_parameter('plunge_feedrate').get_parameter_value().double_value
 
-        self.dt = 1.0 / self.control_rate_hz     # Time step for control loop
+        self.dt = 1.0 / self.control_rate     # Time step for control loop
         
         self.pose_pub = self.create_publisher(PoseStamped, '/desired_drawing_pose', 10)
         
@@ -68,7 +68,7 @@ class TrajectoryGenerator(Node):
                 
             # Determine speed based on whether we are moving in Z (plunging) or XY (drawing)
             is_plunging = abs(p1[2] - p2[2]) > 0.001
-            current_speed = self.plunge_feedrate_m_s if is_plunging else self.drawing_feedrate_m_s
+            current_speed = self.plunge_feedrate if is_plunging else self.drawing_feedrate
             
             # Calculate how much time this segment should take
             segment_time = dist / current_speed
