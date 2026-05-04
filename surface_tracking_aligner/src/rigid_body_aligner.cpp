@@ -145,7 +145,7 @@ private:
                         return;
                     }
 
-                    if (rms_error < 0.02) {
+                    if (rms_error < 0.005) {
                         // 1. Broadcast standard tool tracking
                         geometry_msgs::msg::TransformStamped t_tool;
                         t_tool.header.stamp = msg->header.stamp;
