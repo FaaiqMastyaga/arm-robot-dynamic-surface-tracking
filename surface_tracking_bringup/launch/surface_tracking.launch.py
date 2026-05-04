@@ -36,8 +36,10 @@ def generate_launch_description():
     )
 
     # --- 2. Define the Main System Nodes ---
+    tools_list_str = f"['{active_camera}', '{active_target}']"
     aimooe_tracker_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(aimooe_ros2_dir, 'launch', 'aimooe_tracker.launch.py'))
+        PythonLaunchDescriptionSource(os.path.join(aimooe_ros2_dir, 'launch', 'aimooe_tracker.launch.py')),
+        launch_arguments={'tools_to_track': tools_list_str}.items()
     )
 
     elfin10_l_sim_launch = IncludeLaunchDescription(
