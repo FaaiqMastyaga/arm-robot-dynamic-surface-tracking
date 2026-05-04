@@ -379,8 +379,8 @@ class MasterDashboard(QMainWindow):
             yaml_path = os.path.join(bringup_dir, 'config', 'experiment_config.yaml')
             with open(yaml_path, 'r') as file:
                 config = yaml.safe_load(file)['global_experiment_manager']['ros__parameters']
-                self.canvas_w = float(config['canvas_width_m'])
-                self.canvas_h = float(config['canvas_height_m'])
+                self.canvas_w = float(config['canvas_width'])
+                self.canvas_h = float(config['canvas_height'])
                 print(f"Loaded Canvas Dimensions: {self.canvas_w}m x {self.canvas_h}m")
         except Exception as e:
             print(f"Warning: Failed to load YAML. Using defaults. Error: {e}")
