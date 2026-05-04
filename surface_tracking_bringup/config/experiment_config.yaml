@@ -4,7 +4,7 @@ global_experiment_manager:
     active_camera_aligner: robot_base
     active_target_platform: target_platform
     marker_configuration: coplanar   # Options: coplanar, noncoplanar
-    marker_placement: perpendicular  # Options: parallel, perpendicular (relative to whiteboard platform) 
+    tool_placement: perpendicular  # Options: parallel, perpendicular (relative to whiteboard platform) 
     number_of_markers: 5
     
     # --- Canvas / Workspace Boundaries ---
