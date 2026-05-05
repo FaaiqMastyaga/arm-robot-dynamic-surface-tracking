@@ -11,6 +11,7 @@
 #include <Eigen/Geometry>
 #include <vector>
 #include <string>
+#include <cmath>
 
 using namespace std::chrono_literals;
 
@@ -22,22 +23,24 @@ public:
         // --- Declare Parameters ---
         this->declare_parameter<std::string>("tool_name", "");
         this->declare_parameter<std::vector<double>>("ordered_cad_points", {});
+        this->declare_parameter<std::vector<double>>("ordered_marker_distances", {});
         this->declare_parameter<std::string>("align_camera", "");
         
         // --- Get Parameters ---
         tool_name = this->get_parameter("tool_name").as_string();
         align_camera = this->get_parameter("align_camera").as_string();
+        actual_distances = this->get_parameter("ordered_marker_distances").as_double_array();
 
         std::vector<double> cad_points_flat = this->get_parameter("ordered_cad_points").as_double_array();
         if (cad_points_flat.empty() || cad_points_flat.size() % 3 != 0) {
-            RCLCPP_ERROR(this->get_logger(), "Invalid or missing CAD points. Must be a flat array of 3D points.");
+            RCLCPP_ERROR(this->get_logger(), "Invalid or missing CAD points.");
             throw std::runtime_error("Missing calibrated CAD points.");
         }
 
         // Reshape flat vector into Nx3 matrix
-        int num_points = cad_points_flat.size() / 3;
-        cad_points.resize(num_points, 3);
-        for (int i = 0; i < num_points; ++i) {
+        total_markers = cad_points_flat.size() / 3;
+        cad_points.resize(total_markers, 3);
+        for (int i = 0; i < total_markers; ++i) {
             cad_points(i, 0) = cad_points_flat[i*3 + 0];
             cad_points(i, 1) = cad_points_flat[i*3 + 1];
             cad_points(i, 2) = cad_points_flat[i*3 + 2];
@@ -63,6 +66,8 @@ public:
 private:
     std::string tool_name;
     Eigen::MatrixXd cad_points;
+    std::vector<double> actual_distances;
+    int total_markers;
     std::string align_camera;
 
     std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster;
@@ -71,7 +76,36 @@ private:
     rclcpp::Subscription<aimooe_msgs::msg::ToolArray>::SharedPtr tool_info_sub;
     rclcpp::Publisher<surface_tracking_interfaces::msg::AlignmentTelemetry>::SharedPtr telemetry_pub;
 
-    // Kabsch algorithm implementation
+    // Implementation of the Absolute Euclidean Error (MAE) from image_11e3bc.png
+    double calculate_scale_mae(const std::vector<Eigen::Vector3d>& sensor_markers, const std::vector<int>& valid_indices) {
+        if (actual_distances.empty() || actual_distances.size() != static_cast<size_t>(total_markers * total_markers)) {
+            return -1.0; // Fail gracefully if YAML matrix is missing or wrong size
+        }
+
+        double sum_absolute_error = 0.0;
+        int K = 0;
+
+        // Iterate through all UNIQUE pairs of VISIBLE markers
+        for (size_t i = 0; i < sensor_markers.size(); i++) {
+            for (size_t j = i + 1; j < sensor_markers.size(); j++) {
+                
+                // 1. Calculate d_sensor (Live Euclidean distance)
+                double d_sensor = (sensor_markers[i] - sensor_markers[j]).norm();
+
+                // 2. Fetch d_actual safely using original CAD indices
+                int idx_a = valid_indices[i];
+                int idx_b = valid_indices[j];
+                double d_actual = actual_distances[idx_a * total_markers + idx_b];
+
+                // 3. Accumulate Error
+                sum_absolute_error += std::abs(d_sensor - d_actual);
+                K++;
+            }
+        }
+
+        return (K > 0) ? (sum_absolute_error / K) : -1.0;
+    }
+
     bool calculate_transform(const Eigen::MatrixXd& cad_pts, const Eigen::MatrixXd& cam_pts, Eigen::Isometry3d& transform_out, double& rms_error) {
         if (cad_pts.rows() != cam_pts.rows() || cad_pts.rows() < 3) return false;
 
@@ -101,12 +135,8 @@ private:
         // Calulate RMS Error
         double squared_error_sum = 0.0;
         for (int i = 0; i < cad_pts.rows(); ++i) {
-            Eigen::Vector3d cad_v = cad_pts.row(i).transpose();
-            Eigen::Vector3d cam_v = cam_pts.row(i).transpose();
-
-            Eigen::Vector3d transformed_cad = R * cad_v + t;
-
-            squared_error_sum += (transformed_cad - cam_v).squaredNorm();
+            Eigen::Vector3d transformed_cad = R * cad_pts.row(i).transpose() + t;
+            squared_error_sum += (transformed_cad - cam_pts.row(i).transpose()).squaredNorm();
         }
 
         // Final RMSE
@@ -120,12 +150,14 @@ private:
             if (tool.tool_name == tool_name) {
                 std::vector<Eigen::Vector3d> valid_cam_vec;
                 std::vector<Eigen::Vector3d> valid_cad_vec;
+                std::vector<int> valid_indices; // Track which specific markers are visible
 
                 int iter_idx = 0;
                 for (auto const& pt : tool.marker_points) {
                     if (!(pt.x == 0.0 && pt.y == 0.0 && pt.z == 0.0)) {
                         valid_cam_vec.push_back(Eigen::Vector3d(pt.x, pt.y, pt.z));
                         valid_cad_vec.push_back(cad_points.row(iter_idx));
+                        valid_indices.push_back(iter_idx);
                     }
                     iter_idx++;
                 }
@@ -145,7 +177,15 @@ private:
                         return;
                     }
 
+                    // --- NEW: Calculate the Scale MAE ---
+                    double scale_mae = calculate_scale_mae(valid_cam_vec, valid_indices);
+
                     if (rms_error < 0.005) {
+                        
+                        // Print the validation metrics so you can verify them live!
+                        RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000, 
+                            "[%s] RMSE: %.5f m | Scale MAE: %.5f m", tool_name.c_str(), rms_error, scale_mae);
+
                         // 1. Broadcast standard tool tracking
                         geometry_msgs::msg::TransformStamped t_tool;
                         t_tool.header.stamp = msg->header.stamp;
@@ -179,6 +219,8 @@ private:
                         telemetry_msg.pose.orientation.w = q_tool.w();
 
                         telemetry_msg.rms_error = rms_error;
+
+                        telemetry_msg.mean_abs_error = scale_mae;
 
                         telemetry_pub->publish(telemetry_msg);
 
