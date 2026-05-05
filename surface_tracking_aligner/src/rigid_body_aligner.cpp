@@ -183,7 +183,7 @@ private:
                     if (rms_error < 0.005) {
                         
                         // Print the validation metrics so you can verify them live!
-                        RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000, 
+                        RCLCPP_DEBUG_THROTTLE(this->get_logger(), *this->get_clock(), 1000, 
                             "[%s] RMSE: %.5f m | Scale MAE: %.5f m", tool_name.c_str(), rms_error, scale_mae);
 
                         // 1. Broadcast standard tool tracking
