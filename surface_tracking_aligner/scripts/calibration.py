@@ -6,6 +6,7 @@ import yaml
 import os
 import sys
 import re
+import math
 
 class FlowList(list):
     pass
@@ -38,15 +39,20 @@ def format_yaml_grids(yaml_text):
         if not numbers:
             return f"{indent}{key}: []"
 
-        # If it's a 1D array, put it on one line
-        if key in ['marker_distances', 'ordered_marker_distances']:
-            row_str = ", ".join([f"{num: 9.6f}" for num in numbers])
-            return f"{indent}{key}: [\n{indent}   {row_str},\n{indent}]"
-            
-        # If it's the 3xN coordinates, format as a neat 3-column grid
+        # --- NEW FORMATTING LOGIC ---
+        if key in ['cad_points', 'ordered_cad_points']:
+            # Coordinates are always 3 columns (X, Y, Z)
+            cols = 3
+        else:
+            # Distances: Calculate if it's a perfect square (e.g., 25 elements -> 5x5)
+            length = len(numbers)
+            n = int(math.sqrt(length))
+            if n * n == length and length > 1:
+                cols = n  # Format as an NxN matrix
+            else:
+                cols = length # Fallback: format as 1 line (for size 1 arrays)
+
         formatted_lines = []
-        cols = 3
-        
         for i in range(0, len(numbers), cols):
             row = numbers[i:i+cols]
             row_str = ", ".join([f"{num: 9.6f}" for num in row])
@@ -181,13 +187,32 @@ class CalibrationNode(Node):
         yaml_array = [float(x) for x in ordered_cad_points.flatten()]
         config_data[node_name]['ros__parameters']['ordered_cad_points'] = yaml_array
 
-        # 5. Handle Distances safely as a 1D Array
-        marker_distances = params.get('marker_distances', [])
-        if len(marker_distances) == expected_markers:
-            ordered_dists = [float(marker_distances[i]) for i in matched_cad_indices]
+        # 5. Handle Distances Safely & Dynamically
+        raw_distances = params.get('marker_distances', [])
+        
+        if len(raw_distances) == expected_markers * expected_markers:
+            # Case A: Full NxN Matrix for MAE Evaluation!
+            dist_matrix = np.array(raw_distances).reshape(expected_markers, expected_markers)
+            ordered_matrix = np.zeros((expected_markers, expected_markers))
+            
+            # Rebuild the ENTIRE matrix mapped to the camera's detection order
+            for i in range(expected_markers):
+                for j in range(expected_markers):
+                    idx_a = matched_cad_indices[i]
+                    idx_b = matched_cad_indices[j]
+                    ordered_matrix[i, j] = dist_matrix[idx_a, idx_b]
+                    
+            # Flatten the perfectly ordered matrix back to 1D for YAML saving
+            config_data[node_name]['ros__parameters']['ordered_marker_distances'] = [float(x) for x in ordered_matrix.flatten()]
+
+        elif len(raw_distances) == expected_markers:
+            # Case B: 1D Array (Legacy)
+            ordered_dists = [float(raw_distances[i]) for i in matched_cad_indices]
             config_data[node_name]['ros__parameters']['ordered_marker_distances'] = ordered_dists
+
         else:
-            if not marker_distances:
+            # Case C: Safe fallback
+            if not raw_distances:
                 config_data[node_name]['ros__parameters']['marker_distances'] = [0.0]
             config_data[node_name]['ros__parameters']['ordered_marker_distances'] = [0.0]
 
