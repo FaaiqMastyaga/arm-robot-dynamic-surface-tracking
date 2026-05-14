@@ -22,8 +22,8 @@ public:
     RigidBodyAligner() : Node("rigid_body_aligner") {
         // --- Declare Parameters ---
         this->declare_parameter<std::string>("tool_name", "");
-        this->declare_parameter<std::vector<double>>("ordered_cad_points", {});
-        this->declare_parameter<std::vector<double>>("ordered_marker_distances", {});
+        this->declare_parameter<std::vector<double>>("ordered_cad_points", std::vector<double>{});
+        this->declare_parameter<std::vector<double>>("ordered_marker_distances", std::vector<double>{});
         this->declare_parameter<std::string>("align_camera", "");
         
         // --- Get Parameters ---
