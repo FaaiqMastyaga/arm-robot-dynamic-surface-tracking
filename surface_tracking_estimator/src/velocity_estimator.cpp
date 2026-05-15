@@ -8,18 +8,21 @@
 
 #include "surface_tracking_estimator/velocity_filter_base.hpp"
 #include "surface_tracking_estimator/ema_filter.hpp"
-// #include "surface_tracking_estimator/kalman_filter.hpp"
+#include "surface_tracking_estimator/kalman_filter.hpp"
 
 using namespace std::chrono_literals;
 
 class VelocityEstimator : public rclcpp::Node 
 {
 public:
-    VelocityEstimator(const rclcpp::NodeOptions& options = rclcpp::NodeOptions()) : Node("velocity_estimator", options) 
+    VelocityEstimator(const rclcpp::NodeOptions& options = rclcpp::NodeOptions()) 
+        : Node("velocity_estimator", options) 
     {
-        // Declare parameters
-        this->declare_parameter<std::string>("filter_type", "ema");
+        // Declare parameters for BOTH filters
         this->declare_parameter<double>("ema_alpha", 0.2);
+        this->declare_parameter<double>("kalman_q_multiplier", 0.01);
+        this->declare_parameter<double>("kalman_r_multiplier", 0.1);
+        
         this->declare_parameter<std::string>("base_frame", "elfin_base_link");
         this->declare_parameter<std::string>("target_frame", "whiteboard");
         this->declare_parameter<double>("update_rate", 100.0);
@@ -29,25 +32,26 @@ public:
         target_frame_ = this->get_parameter("target_frame").as_string();
         double update_rate = this->get_parameter("update_rate").as_double();
         
-        // Initialize Filter
-        std::string filter_type = this->get_parameter("filter_type").as_string();
-        if (filter_type == "ema") {
-            double alpha = this->get_parameter("ema_alpha").as_double();
-            active_filter_ = std::make_unique<surface_tracking_estimator::EMAFilter>(alpha);
-            RCLCPP_INFO(this->get_logger(), "Initialized EMA Filter with alpha: %.2f", alpha);
-        } else if (filter_type == "kalman") {
-            // Eigen::MatrixXd Q = Eigen::MatrixXd::Identity(6, 6) * 0.01;
-            // Eigen::MatrixXd R = Eigen::MatrixXd::Identity(6, 6) * 0.1;
-            // active_filter_ = std::make_unique<surface_tracking_estimator::KalmanFilter>(Q, R);
-        }
+        // Initialize EMA Filter
+        double alpha = this->get_parameter("ema_alpha").as_double();
+        ema_filter_ = std::make_unique<surface_tracking_estimator::EMAFilter>(alpha);
+        
+        // Initialize Kalman Filter
+        double q_mult = this->get_parameter("kalman_q_multiplier").as_double();
+        double r_mult = this->get_parameter("kalman_r_multiplier").as_double();
+        kalman_filter_ = std::make_unique<surface_tracking_estimator::KalmanFilter>(q_mult, r_mult);
+
+        RCLCPP_INFO(this->get_logger(), "Initialized BOTH Filters. EMA(alpha: %.2f), Kalman(Q: %.4f, R: %.4f)", 
+                    alpha, q_mult, r_mult);
 
         // Initialize TF2
         tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
         tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
-        // Initialize Publisher
+        // Initialize Publishers
         raw_twist_pub_ = this->create_publisher<geometry_msgs::msg::TwistStamped>("/surface_tracking/raw_velocity", 10);
-        twist_pub_ = this->create_publisher<geometry_msgs::msg::TwistStamped>("/surface_tracking/estimated_velocity", 10);
+        ema_twist_pub_ = this->create_publisher<geometry_msgs::msg::TwistStamped>("/surface_tracking/ema_velocity", 10);
+        kalman_twist_pub_ = this->create_publisher<geometry_msgs::msg::TwistStamped>("/surface_tracking/kalman_velocity", 10);
 
         // Setup Timer
         last_time_ = rclcpp::Time(0, 0, this->get_clock()->get_clock_type());
@@ -60,7 +64,9 @@ public:
     }
 
 private:
-    std::unique_ptr<surface_tracking_estimator::VelocityFilterBase> active_filter_;
+    std::unique_ptr<surface_tracking_estimator::VelocityFilterBase> ema_filter_;
+    std::unique_ptr<surface_tracking_estimator::VelocityFilterBase> kalman_filter_;
+    
     rclcpp::Time last_time_;
 
     std::vector<double> prev_pose_vector_;
@@ -68,7 +74,8 @@ private:
     bool first_q_init_ = false;
 
     rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr raw_twist_pub_;
-    rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr twist_pub_;
+    rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr ema_twist_pub_;
+    rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr kalman_twist_pub_;
     rclcpp::TimerBase::SharedPtr timer_;
 
     std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
@@ -81,13 +88,10 @@ private:
         geometry_msgs::msg::TransformStamped t_target_to_base;
 
         try {
-            // Lookup the latest from robot base to the whiteboard
             t_target_to_base = tf_buffer_->lookupTransform(
                 base_frame_, target_frame_, tf2::TimePointZero);
         } catch (const tf2::TransformException& ex) {
-            RCLCPP_DEBUG(this->get_logger(), "Could not transform %s to %s: %s",
-                         base_frame_.c_str(), target_frame_.c_str(), ex.what());
-            return;
+            return; // Fail silently to avoid spamming the terminal if whiteboard is temporarily blocked
         }
         
         rclcpp::Time current_time = t_target_to_base.header.stamp;
@@ -116,7 +120,6 @@ private:
             t_target_to_base.transform.rotation.w
         );
 
-        // Calculate raw velocity
         if (first_q_init_) {
             std::vector<double> raw_velocity(6, 0.0);
 
@@ -127,7 +130,6 @@ private:
 
             // Angular velocity
             tf2::Quaternion delta_q = current_q * prev_q_.inverse();
-
             double angle = delta_q.getAngle();
             if (angle > M_PI) {
                 angle -= 2.0 * M_PI; // Normalize to shortest path
@@ -138,7 +140,7 @@ private:
             raw_velocity[4] = (angle / dt) * axis.y();
             raw_velocity[5] = (angle / dt) * axis.z();
 
-            // Publish raw velocity
+            // --- PUBLISH RAW ---
             geometry_msgs::msg::TwistStamped raw_twist_msg; 
             raw_twist_msg.header.stamp = current_time;
             raw_twist_msg.header.frame_id = base_frame_;
@@ -150,21 +152,27 @@ private:
             raw_twist_msg.twist.angular.z = raw_velocity[5];
             raw_twist_pub_->publish(raw_twist_msg);
 
-            // Run filter
-            std::vector<double> filtered_velocity = active_filter_->update(raw_velocity, dt);
+            // --- RUN AND PUBLISH EMA ---
+            std::vector<double> ema_velocity = ema_filter_->update(raw_velocity, dt);
+            geometry_msgs::msg::TwistStamped ema_msg = raw_twist_msg; // Copy headers
+            ema_msg.twist.linear.x = ema_velocity[0];
+            ema_msg.twist.linear.y = ema_velocity[1];
+            ema_msg.twist.linear.z = ema_velocity[2];
+            ema_msg.twist.angular.x = ema_velocity[3];
+            ema_msg.twist.angular.y = ema_velocity[4];
+            ema_msg.twist.angular.z = ema_velocity[5];
+            ema_twist_pub_->publish(ema_msg);
 
-            // Publish filtered velocity
-            geometry_msgs::msg::TwistStamped twist_msg;
-            twist_msg.header.stamp = current_time;
-            twist_msg.header.frame_id = base_frame_;
-            twist_msg.twist.linear.x = filtered_velocity[0];
-            twist_msg.twist.linear.y = filtered_velocity[1];
-            twist_msg.twist.linear.z = filtered_velocity[2];
-            twist_msg.twist.angular.x = filtered_velocity[3];
-            twist_msg.twist.angular.y = filtered_velocity[4];
-            twist_msg.twist.angular.z = filtered_velocity[5];
-            twist_pub_->publish(twist_msg);
-
+            // --- RUN AND PUBLISH KALMAN ---
+            std::vector<double> kalman_velocity = kalman_filter_->update(raw_velocity, dt);
+            geometry_msgs::msg::TwistStamped kalman_msg = raw_twist_msg; // Copy headers
+            kalman_msg.twist.linear.x = kalman_velocity[0];
+            kalman_msg.twist.linear.y = kalman_velocity[1];
+            kalman_msg.twist.linear.z = kalman_velocity[2];
+            kalman_msg.twist.angular.x = kalman_velocity[3];
+            kalman_msg.twist.angular.y = kalman_velocity[4];
+            kalman_msg.twist.angular.z = kalman_velocity[5];
+            kalman_twist_pub_->publish(kalman_msg);
         }
 
         // Store for next loop iteration
