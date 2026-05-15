@@ -16,7 +16,7 @@ KalmanFilter::KalmanFilter(double q_multiplier, double r_multiplier)
     // Measurement Noise (R): How noisy our measurements are
     R_ = Eigen::MatrixXd::Identity(m_, m_) * r_multiplier; // Measurement noise covariance
 
-    // State transition matrix (assuming constant velocity model)
+    // State transition matrix (Constant Acceleration Model)
     A_ = Eigen::MatrixXd::Identity(n_, n_);
 
     // Measurement matrix (we measure position only)
@@ -39,16 +39,16 @@ std::vector<double> KalmanFilter::update(const std::vector<double>& raw_velocity
     if (!is_initialized_) {
         // Initialize state with the first measurement, zero acceleration
         x_.segment(0, m_) = z;
-        x_.segment(m_, m_).setZero(); // Initial velocity is zero
+        x_.segment(m_, m_).setZero(); // Initial acceleration is zero
 
         is_initialized_ = true;
         return raw_velocity;
     }
 
     // --- PREDICTION STEP ---
-    // Update state transition matrix A wwith current dt
+    // Update state transition matrix A with current dt
     for (int i = 0; i < m_; ++i) {
-        A_(i, i + m_) = dt; // velocity = velocity + acceleration * dt, but we assume constant velocity (acceleration = 0)
+        A_(i, i + m_) = dt; // velocity = velocity + acceleration * dt, (acceleration is tracked and assumed constant over dt)
     }
 
     // Predict state: x_k|k-1 = A * x_k-1|k-1
