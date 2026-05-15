@@ -38,8 +38,8 @@ std::vector<double> KalmanFilter::update(const std::vector<double>& raw_velocity
 
     if (!is_initialized_) {
         // Initialize state with the first measurement, zero acceleration
-        x_.head(m_) = z; // Set initial position from measurement
-        x_.tail(m_).setZero(); // Initial velocity is zero
+        x_.segment(0, m_) = z;
+        x_.segment(m_, m_).setZero(); // Initial velocity is zero
 
         is_initialized_ = true;
         return raw_velocity;
@@ -52,7 +52,7 @@ std::vector<double> KalmanFilter::update(const std::vector<double>& raw_velocity
     }
 
     // Predict state: x_k|k-1 = A * x_k-1|k-1
-    x_ = A_ * x_; // State prediction
+    x_ = A_ * x_;
 
     // Predict covariance: P_k|k-1 = A * P_k-1|k-1 * A^T + Q
     P_ = A_ * P_ * A_.transpose() + Q_;
@@ -68,14 +68,16 @@ std::vector<double> KalmanFilter::update(const std::vector<double>& raw_velocity
     Eigen::MatrixXd K = P_ * H_.transpose() * S.inverse();
 
     // Update state: x_k|k = x_k|k-1 + K * y 
-    x_ = x_ + K * y;
+    x_ = x_ + (K * y);
 
     // Update covariance: P_k|k = (I - K * H) * P_k|k-1
     P_ = (I_ - K * H_) * P_;
 
     // Extract filtered velocity from state vector
     std::vector<double> filtered_velocity(m_);
-    Eigen::VectorXd::Map(&filtered_velocity[0], m_) = x_.head(m_);
+    for (int i = 0; i < m_; ++i) {
+        filtered_velocity[i] = x_(i);
+    }
 
     return filtered_velocity;
 }
@@ -84,7 +86,7 @@ void KalmanFilter::reset()
 {
     is_initialized_ = false;
     x_.setZero();
-    P_.setIdentity();
+    P_ = Eigen::MatrixXd::Identity(n_, n_);
 }
 
 } // namespace surface_tracking_estimator
