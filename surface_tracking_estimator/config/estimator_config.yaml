@@ -1,12 +1,12 @@
-/**:
+velocity_estimator:
   ros__parameters:
-    filter_type: ema # Options: ema (Exponential Moving Average), kalman
-    update_rate: 100.0  # Hz
-    base_frame: elfin_base_link
-    target_frame: whiteboard
-
-    # EMA (Exponential Moving Average) specific parameters
-    ema_alpha: 0.2
-
-    # Kalman Filter specific parameters
+    base_frame: "elfin_base_link"
+    target_frame: "whiteboard"
+    update_rate: 100.0
     
+    # EMA Tuning
+    ema_alpha: 0.15
+    
+    # Kalman Tuning (Constant Acceleration Model)
+    kalman_q_multiplier: 0.03  # Process Noise: Increase to trust sensor more (reduce lag, increase jitter)
+    kalman_r_multiplier: 0.2   # Measurement Noise: Increase to trust model more (increase smoothness, slight lag)

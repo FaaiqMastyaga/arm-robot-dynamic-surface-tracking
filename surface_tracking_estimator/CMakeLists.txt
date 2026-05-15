@@ -17,8 +17,10 @@ find_package(Eigen3 REQUIRED)
 # --- Build filter implementation into a shared library ---
 add_library(${PROJECT_NAME} SHARED
   src/ema_filter.cpp
-  # src/kalman_filter.cpp
+  src/kalman_filter.cpp
 )
+
+target_link_libraries(${PROJECT_NAME} PUBLIC Eigen3::Eigen)
 
 # --- Include Directories ---
 target_include_directories(${PROJECT_NAME} PUBLIC
@@ -36,7 +38,6 @@ ament_target_dependencies(velocity_estimator
   tf2
   tf2_ros
   tf2_geometry_msgs
-  Eigen3
 )
 
 # Link the node to your custom filter library
