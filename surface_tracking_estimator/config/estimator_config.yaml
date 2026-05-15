@@ -1,0 +1,12 @@
+velocity_estimator:
+  ros__parameters:
+    filter_type: ema # Options: ema (Exponential Moving Average), kalman
+    update_rate: 100.0  # Hz
+    base_frame: elfin_base_link
+    target_frame: target_platform
+
+    # EMA (Exponential Moving Average) specific parameters
+    ema_alpha: 0.2
+
+    # Kalman Filter specific parameters
+    

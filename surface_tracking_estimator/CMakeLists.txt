@@ -17,6 +17,7 @@ find_package(Eigen3 REQUIRED)
 # --- Build filter implementation into a shared library ---
 add_library(${PROJECT_NAME} SHARED
   src/ema_filter.cpp
+  # src/kalman_filter.cpp
 )
 
 # --- Include Directories ---
@@ -26,10 +27,10 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 )
 
 # --- Build the ROS 2 Node Executable ---
-add_executable(velocity_estimator_node src/velocity_estimator_node.cpp)
+add_executable(velocity_estimator src/velocity_estimator.cpp)
 
 # Link the node to ROS 2 dependencies
-ament_target_dependencies(velocity_estimator_node
+ament_target_dependencies(velocity_estimator
   rclcpp
   geometry_msgs
   tf2
@@ -39,13 +40,13 @@ ament_target_dependencies(velocity_estimator_node
 )
 
 # Link the node to your custom filter library
-target_link_libraries(velocity_estimator_node 
+target_link_libraries(velocity_estimator 
   ${PROJECT_NAME}
   Eigen3::Eigen
 )
 
 # --- Install the Executable ---
-install(TARGETS ${PROJECT_NAME} velocity_estimator_node
+install(TARGETS ${PROJECT_NAME} velocity_estimator
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}
@@ -53,6 +54,12 @@ install(TARGETS ${PROJECT_NAME} velocity_estimator_node
 
 install(DIRECTORY include/
   DESTINATION include
+)
+
+install(DIRECTORY
+  config
+  launch
+  DESTINATION share/${PROJECT_NAME}/
 )
 
 if(BUILD_TESTING)

@@ -12,6 +12,7 @@ def generate_launch_description():
     elfin10_l_ros2_moveit2_dir = get_package_share_directory('elfin10_l_ros2_moveit2')
     aligner_dir = get_package_share_directory('surface_tracking_aligner')
     visualization_dir = get_package_share_directory('surface_tracking_visualization')
+    estimator_dir = get_package_share_directory('surface_tracking_estimator')
 
     global_yaml_path = os.path.join(bringup_dir, 'config', 'experiment_config.yaml')
 
@@ -60,6 +61,10 @@ def generate_launch_description():
         launch_arguments={'active_camera': active_camera, 'active_target': active_target}.items()
     )
 
+    estimator_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(os.path.join(estimator_dir, 'launch', 'velocity_estimator.launch.py'))
+    )
+
     # Group the main system so we can launch it all at once later
     main_system_actions = [
         LogInfo(msg="=== Calibrations Complete! Launching Main System ==="),
@@ -67,7 +72,8 @@ def generate_launch_description():
         elfin10_l_sim_launch,
         elfin10_l_basic_api_launch,
         aligner_launch,
-        visualizer_launch
+        visualizer_launch,
+        estimator_launch
     ]
 
     # --- 3. Build the Execution Chain ---
