@@ -13,6 +13,7 @@ def generate_launch_description():
     aligner_dir = get_package_share_directory('surface_tracking_aligner')
     visualization_dir = get_package_share_directory('surface_tracking_visualization')
     estimator_dir = get_package_share_directory('surface_tracking_estimator')
+    controller_dir = get_package_share_directory('surface_tracking_controller')
 
     global_yaml_path = os.path.join(bringup_dir, 'config', 'experiment_config.yaml')
 
@@ -23,6 +24,12 @@ def generate_launch_description():
     marker_configuration = global_config['marker_configuration']
     active_camera = global_config['active_camera_aligner']
     active_target = f"{global_config['active_target_platform']}_{marker_configuration}_{number_of_markers}pt"
+
+    controller_type = global_config.get('controller_type', 'pid_ff')
+    filter_type = global_config.get('filter_type', 'kalman_filter')
+
+    task_frame = global_config.get('task_frame', 'whiteboard')
+    base_frame = global_config.get('base_frame', 'elfin_base_link')
 
     # --- 1. Define Calibration Processes ---
     # We use ExecuteProcess to run the calibration launch file as if from the terminal
@@ -62,7 +69,19 @@ def generate_launch_description():
     )
 
     estimator_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(estimator_dir, 'launch', 'velocity_estimator.launch.py'))
+        PythonLaunchDescriptionSource(os.path.join(estimator_dir, 'launch', 'velocity_estimator.launch.py')),
+        launch_arguments={
+            'target_frame': task_frame,
+            'base_frame': base_frame
+        }.items()
+    )
+
+    controller_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(os.path.join(controller_dir, 'launch', 'dynamic_tracker.launch.py')),
+        launch_arguments={
+            'filter_type': filter_type,
+            'controller_type': controller_type
+        }.items()
     )
 
     # Group the main system so we can launch it all at once later
@@ -73,7 +92,8 @@ def generate_launch_description():
         elfin10_l_basic_api_launch,
         aligner_launch,
         visualizer_launch,
-        estimator_launch
+        estimator_launch,
+        controller_launch
     ]
 
     # --- 3. Build the Execution Chain ---

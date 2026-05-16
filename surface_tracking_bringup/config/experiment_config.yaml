@@ -3,9 +3,13 @@ global_experiment_manager:
     # --- Active Hardware Definitions ---
     active_camera_aligner: robot_base
     active_target_platform: target_platform
-    marker_configuration: coplanar   # Options: coplanar, noncoplanar
+    marker_configuration: noncoplanar   # Options: coplanar, noncoplanar
     tool_placement: perpendicular  # Options: parallel, perpendicular (relative to whiteboard platform) 
     number_of_markers: 5
+
+    # Frame Definitions
+    task_frame: whiteboard
+    base_frame: elfin_base_link
     
     # --- Canvas / Workspace Boundaries ---
     canvas_width: 0.30   # 30 cm wide
@@ -17,4 +21,6 @@ global_experiment_manager:
     z_hover_height: 0.01         # 1 cm above the board when not drawing
 
     # --- Control Loop Parameters ---
-    control_loop_rate: 50.0    # 50 Hz control loop
+    control_loop_rate: 100.0    # 100 Hz control loop
+    controller_type: pid_ff     # Options: pid, pid_ff, mpc
+    filter_type: kalman_filter  # Options: raw, ema_filter, kalman_filter
