@@ -25,6 +25,7 @@ setup(
     entry_points={
         'console_scripts': [
             'master_dashboard = surface_tracking_gui.master_dashboard:main',
+            'dashboard_server = surface_tracking_gui.dashboard_server:main',
         ],
     },
 )
