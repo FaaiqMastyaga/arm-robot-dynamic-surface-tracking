@@ -31,6 +31,7 @@ public:
         this->declare_parameter<double>("kd", 0.0);
         this->declare_parameter<double>("k_ff", 0.0);
         this->declare_parameter<double>("max_cmd_vel", 0.5);
+        this->declare_parameter<double>("max_integral", 1.0);
 
         // Fetch Parameter
         std::string controller_type = this->get_parameter("controller_type").as_string();
@@ -40,18 +41,19 @@ public:
         double kd = this->get_parameter("kd").as_double();
         double k_ff = this->get_parameter("k_ff").as_double();
         max_cmd_vel_ = this->get_parameter("max_cmd_vel").as_double();
+        double max_integral = this->get_parameter("max_integral").as_double();
 
         double control_loop_period = 1000.0 / control_loop_rate;
 
         // Initialize controller
         if (controller_type == "pid") {
             for (int i = 0; i < 6; ++i) {
-                siso_controllers_.push_back(std::make_unique<PidController>(kp, ki, kd));
+                siso_controllers_.push_back(std::make_unique<PidController>(kp, ki, kd, max_integral));
             }
         }
         else if (controller_type == "pid_ff") {
             for (int i = 0; i < 6; ++i) {
-                siso_controllers_.push_back(std::make_unique<PidFeedforwardController>(kp, ki, kd, k_ff));
+                siso_controllers_.push_back(std::make_unique<PidFeedforwardController>(kp, ki, kd, k_ff, max_integral));
             }
         }
         else if (controller_type == "mpc") {
