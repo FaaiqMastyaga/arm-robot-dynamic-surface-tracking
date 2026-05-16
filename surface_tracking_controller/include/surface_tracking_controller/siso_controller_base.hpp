@@ -14,6 +14,7 @@ public:
     // Feedforward update (default simply ignores the target_velocity and calls standard update)
     virtual double update_with_ff(double state, double setpoint, double target_velocity, double dt)
     {
+        (void)target_velocity;
         return update(state, setpoint, dt);
     }
 
