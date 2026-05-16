@@ -216,5 +216,15 @@ private:
 
 }  // namespace surface_tracking_controller
 
-#include "rclcpp_components/register_node_macro.hpp"
-RCLCPP_COMPONENTS_REGISTER_NODE(surface_tracking_controller::DynamicTracker)
+int main(int argc, char * argv[])
+{
+    rclcpp::init(argc, argv);
+    
+    // Create the node options and spin the node
+    rclcpp::NodeOptions options;
+    auto node = std::make_shared<surface_tracking_controller::DynamicTracker>(options);
+    
+    rclcpp::spin(node);
+    rclcpp::shutdown();
+    return 0;
+}
