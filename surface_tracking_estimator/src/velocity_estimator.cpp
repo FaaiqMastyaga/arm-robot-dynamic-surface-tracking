@@ -49,9 +49,9 @@ public:
         tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
         // Initialize Publishers
-        raw_twist_pub_ = this->create_publisher<geometry_msgs::msg::TwistStamped>("/surface_tracking/raw_velocity", 10);
-        ema_twist_pub_ = this->create_publisher<geometry_msgs::msg::TwistStamped>("/surface_tracking/ema_velocity", 10);
-        kalman_twist_pub_ = this->create_publisher<geometry_msgs::msg::TwistStamped>("/surface_tracking/kalman_velocity", 10);
+        raw_twist_pub_ = this->create_publisher<geometry_msgs::msg::TwistStamped>("/estimated_target_twist/raw", 10);
+        ema_twist_pub_ = this->create_publisher<geometry_msgs::msg::TwistStamped>("/estimated_target_twist/ema_filter", 10);
+        kalman_twist_pub_ = this->create_publisher<geometry_msgs::msg::TwistStamped>("/estimated_target_twist/kalman_filter", 10);
 
         // Setup Timer
         last_time_ = rclcpp::Time(0, 0, this->get_clock()->get_clock_type());
