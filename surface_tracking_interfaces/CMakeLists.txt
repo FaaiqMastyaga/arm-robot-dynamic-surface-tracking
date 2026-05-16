@@ -16,6 +16,8 @@ find_package(rosidl_default_generators REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "action/DrawTrajectory.action"
   "msg/AlignmentTelemetry.msg"
+  "msg/DashboardStatus.msg"
+  "msg/JogCommand.msg"
   DEPENDENCIES geometry_msgs std_msgs
 )
 
