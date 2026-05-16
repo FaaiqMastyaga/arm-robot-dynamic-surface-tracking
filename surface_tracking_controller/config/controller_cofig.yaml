@@ -1,0 +1,16 @@
+dynamic_tracking:
+  ros__parameters:
+    controller_type: pid_ff   # Options: pid, pid_ff, mpc
+    control_loop_rate: 100.0
+    max_cmd_vel: 0.5
+
+    # PID & PID Feedforward Tuning
+    kp: 1.0
+    ki: 0.0
+    kd: 0.0
+    k_ff: 1.0
+    max_integral: 1.0
+
+    # MPC Tuning
+    mpc_horizon: 10
+    mpc_dt: 0.1
