@@ -69,7 +69,9 @@ class RosFrontendWorker(QThread):
             'clear': self.node.create_client(SetBool, '/clear_fault'),
             'home': self.node.create_client(SetBool, '/home_teleop'),
             'stop': self.node.create_client(SetBool, '/stop_teleop'),
-            'clear_rviz': self.node.create_client(Trigger, '/dashboard/clear_rviz_path')
+            'clear_rviz': self.node.create_client(Trigger, '/dashboard/clear_rviz_path'),
+            'start_servo': self.node.create_client(Trigger, '/servo_node/start_servo'),
+            'stop_servo': self.node.create_client(Trigger, '/servo_node/stop_servo')
         }
 
         # --- Action Client ---
@@ -267,6 +269,7 @@ class DashboardClient(QMainWindow):
         
         self.joint_limits = [(-180, 180), (-135, 135), (-150, 150), (-180, 180), (-147, 147), (-180, 180)]
         self.vel_sliders_ui = []
+        self.servo_active_flag = False
         
         # Jogging Timer
         self.jog_timer = QTimer()
@@ -298,9 +301,11 @@ class DashboardClient(QMainWindow):
         # --- Middle Area ---
         middle_layout = QHBoxLayout()
         self.tabs = QTabWidget()
+
+        self.tabs.currentChanged.connect(self.on_tab_changed)
         
         # Restored Tabs
-        self.tabs.addTab(self.create_canvas_tab(), "Experiment Canvas")
+        self.tabs.addTab(self.create_canvas_tab(), "Canvas")
         self.tabs.addTab(self.create_cartesian_goal_tab(), "Cartesian Goal")
         self.tabs.addTab(self.create_joint_goal_tab(), "Joint Goal")
         self.tabs.addTab(self.create_jogging_tab(), "Jogging")
@@ -319,6 +324,9 @@ class DashboardClient(QMainWindow):
         log_group.setLayout(log_layout)
         main_layout.addWidget(log_group)
 
+        # Wait 500ms to ensure the ROS thread has created the clients before waking the servo
+        QTimer.singleShot(500, lambda: self.on_tab_changed(0))
+        
     # --- TABS ---
     def create_canvas_tab(self):
         w = QWidget(); layout = QVBoxLayout(w)
