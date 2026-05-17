@@ -26,6 +26,7 @@ setup(
         'console_scripts': [
             'master_dashboard = surface_tracking_gui.master_dashboard:main',
             'dashboard_server = surface_tracking_gui.dashboard_server:main',
+            'dashboard_client = surface_tracking_gui.dashboard_client:main',
         ],
     },
 )
