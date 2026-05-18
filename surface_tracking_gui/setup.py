@@ -1,3 +1,5 @@
+import os
+from glob import glob
 from setuptools import find_packages, setup
 
 package_name = 'surface_tracking_gui'
@@ -10,6 +12,7 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -24,7 +27,6 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'master_dashboard = surface_tracking_gui.master_dashboard:main',
             'dashboard_server = surface_tracking_gui.dashboard_server:main',
             'dashboard_client = surface_tracking_gui.dashboard_client:main',
         ],
