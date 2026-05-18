@@ -44,6 +44,7 @@ class RosFrontendWorker(QThread):
         super().__init__()
         self.node = None
         self.current_vel_scale = 0.4
+        self.client_map = {}
 
     def run(self):
         rclpy.init(args=sys.argv)
@@ -302,8 +303,6 @@ class DashboardClient(QMainWindow):
         middle_layout = QHBoxLayout()
         self.tabs = QTabWidget()
 
-        self.tabs.currentChanged.connect(self.on_tab_changed)
-        
         # Restored Tabs
         self.tabs.addTab(self.create_canvas_tab(), "Canvas")
         self.tabs.addTab(self.create_cartesian_goal_tab(), "Cartesian Goal")
@@ -323,6 +322,8 @@ class DashboardClient(QMainWindow):
         log_layout.addWidget(self.result_log)
         log_group.setLayout(log_layout)
         main_layout.addWidget(log_group)
+
+        self.tabs.currentChanged.connect(self.on_tab_changed)
 
         # Wait 500ms to ensure the ROS thread has created the clients before waking the servo
         QTimer.singleShot(500, lambda: self.on_tab_changed(0))
