@@ -18,7 +18,7 @@ def generate_launch_description():
         package='surface_tracking_gui',
         executable='dashboard_server',
         output='screen',
-        parameters=[{'use_sim_time': use_sim_time}]
+        parameters=[{'use_sim_time': use_sim_time}],
         respawn=True,
         respawn_delay=2.0
     )
@@ -27,7 +27,7 @@ def generate_launch_description():
         package='surface_tracking_gui',
         executable='dashboard_client',
         output='screen',
-        parameters=[{'use_sim_time': use_sim_time}]
+        parameters=[{'use_sim_time': use_sim_time}],
         respawn=True,
         respawn_delay=2.0
     )
