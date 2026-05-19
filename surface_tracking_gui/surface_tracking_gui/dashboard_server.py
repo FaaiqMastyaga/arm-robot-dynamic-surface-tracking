@@ -31,6 +31,7 @@ class DashboardServer(Node):
         self.status_msg = DashboardStatus()
         self.executed_path = Path()
         self.executed_path.header.frame_id = self.base_frame
+        self.is_tracking_active = False
 
         # --- TF2 Setup ---
         self.tf_buffer = Buffer()
@@ -46,8 +47,8 @@ class DashboardServer(Node):
         self.path_pub = self.create_publisher(Path, '/executed_trajectory', 10)
         
         # 3. MoveIt Servo Commands
-        self.twist_jog_pub = self.create_publisher(TwistStamped, '/servo_node/delta_twist_cmds', 10)
-        self.joint_jog_pub = self.create_publisher(JointJog, '/servo_node/delta_joint_cmds', 10)
+        self.servo_twist_pub = self.create_publisher(TwistStamped, '/servo_node/delta_twist_cmds', 10)
+        self.servo_joint_pub = self.create_publisher(JointJog, '/servo_node/delta_joint_cmds', 10)
 
         # ==========================================
         # SUBSCRIBERS
@@ -60,6 +61,10 @@ class DashboardServer(Node):
 
         # 2. GUI Commands
         self.create_subscription(JogCommand, '/dashboard/jog_cmds', self.cb_jog_commands, 10)
+
+        # 3. Multiplexer
+        self.create_subscription(Bool, '/tracking_active_flag', self.cb_tracking_flag, 10)
+        self.create_subscription(TwistStamped, '/tracking/delta_twist_cmds', self.cb_tracking_twist, 10)
 
         # ==========================================
         # SERVICES PROVIDED
@@ -94,9 +99,28 @@ class DashboardServer(Node):
         except Exception:
             pass
 
-    # --- GUI Command Callbacks ---
+    # --- Multiplexer Logic
+    def cb_tracking_flag(self, msg: Bool):
+        if self.is_tracking_active and not msg.data:
+            twist = TwistStamped()
+            twist.header.stamp = self.get_clock().now().to_msg()
+            twist.header.frame_id = self.base_frame
+            self.servo_twist_pub.publish(twist)
+            self.get_logger().info('Tracking disabled. Auto-brake applied to robot.')
+
+        self.is_tracking_active = msg.data
+
+    def cb_tracking_twist(self, msg: TwistStamped):
+        # Only allow controller node to move the robot if tracking is active
+        if self.is_tracking_active:
+            self.servo_twist_pub.publish(msg)
+
     def cb_jog_commands(self, msg: JogCommand):
-        """Translates lightweight GUI jog requests into strict MoveIt Servo messages."""
+        # Block jogging if tracking is currently active to prevent collisions
+        if self.is_tracking_active:
+            self.get_logger().warn('Jog blocked: Canvas Tracking is active!', throttle_duration_sec=2.0)
+            return
+
         if msg.jog_type == 'cart':
             twist = TwistStamped()
             twist.header.stamp = self.get_clock().now().to_msg()
@@ -110,7 +134,7 @@ class DashboardServer(Node):
             elif msg.axis == 4: twist.twist.angular.y = val
             elif msg.axis == 5: twist.twist.angular.z = val
             
-            self.twist_jog_pub.publish(twist)
+            self.servo_twist_pub.publish(twist)
 
         elif msg.jog_type == 'joint':
             jog = JointJog()
@@ -119,7 +143,7 @@ class DashboardServer(Node):
             jog.joint_names = [f'elfin_joint{msg.axis + 1}']
             jog.velocities = [msg.direction * msg.velocity_scale]
             
-            self.joint_jog_pub.publish(jog)
+            self.servo_joint_pub.publish(jog)
 
     def srv_clear_path(self, request, response):
         """Clears the RViz trajectory history."""

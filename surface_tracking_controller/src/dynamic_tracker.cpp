@@ -65,7 +65,7 @@ public:
         tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
         // Setup Publisher
-        servo_twist_pub_ = this->create_publisher<geometry_msgs::msg::TwistStamped>("/servo_node/delta_twist_cmds", 10);
+        servo_twist_pub_ = this->create_publisher<geometry_msgs::msg::TwistStamped>("/tracking/delta_twist_cmds", 10);
 
         // Setup Subscriber
         planner_pose_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(

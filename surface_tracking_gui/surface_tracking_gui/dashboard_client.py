@@ -130,12 +130,6 @@ class RosFrontendWorker(QThread):
         t.transform.rotation.x, t.transform.rotation.y, t.transform.rotation.z, t.transform.rotation.w = orient
         self.tf_static_broadcaster_.sendTransform(t)
 
-    def set_tracking_ready_mode(self, active):
-        msg = Bool()
-        msg.data = active
-        self.tracking_mode_pub.publish(msg)
-        self.service_response_signal.emit(True, f"Tracking Ready Mode: {'ON' if active else 'OFF'}")
-
     # --- Action Handling ---
     def trigger_hover_state(self, canvas_w, canvas_h):
         # 1. Turn on the tracking flag
@@ -169,8 +163,7 @@ class RosFrontendWorker(QThread):
         self.tracking_mode_pub.publish(msg)
         
         # 2. Hard-stop MoveIt Servo to freeze the robot in place
-        self.call_service('stop_servo')
-        self.service_response_signal.emit(True, "Tracking Stopped. Robot Frozen.")
+        self.service_response_signal.emit(True, "Tracking logic halted.")
 
     def send_drawing_goal(self, points_3d, scale_factor):
         if not self.draw_client.wait_for_server(timeout_sec=1.0):
@@ -201,6 +194,31 @@ class RosFrontendWorker(QThread):
         res = future.result().result
         self.action_result_signal.emit(res.success, res.message)
 
+    def set_tracking_ready_mode(self, active):
+        msg = Bool()
+        msg.data = active
+        self.tracking_mode_pub.publish(msg)
+        self.service_response_signal.emit(True, f"Tracking Ready Mode: {'ON' if active else 'OFF'}")
+
+    def send_zero_jog(self):
+        """Forces the robot to a complete halt by explicitly sending 0.0 velocities."""
+        # 1. Zero Cartesian Twist
+        msg_cart = JogCommand()
+        msg_cart.jog_type = 'cart'
+        msg_cart.axis = 0
+        msg_cart.direction = 0.0
+        msg_cart.velocity_scale = 0.0
+        msg_cart.frame_id = 'elfin_base_link'
+        self.jog_pub.publish(msg_cart)
+
+        # 2. Zero Joint Jog
+        msg_joint = JogCommand()
+        msg_joint.jog_type = 'joint'
+        msg_joint.axis = 0
+        msg_joint.direction = 0.0
+        msg_joint.velocity_scale = 0.0
+        msg_joint.frame_id = 'elfin_base_link'
+        self.jog_pub.publish(msg_joint)
 
 # ---------------------------------------------------------
 # 2. THE DRAWABLE CANVAS WIDGET (Unchanged)
@@ -381,7 +399,7 @@ class DashboardClient(QMainWindow):
         self.btn_ready = QPushButton("READY (HOVER)")
         self.btn_ready.setStyleSheet("background-color: #87CEFA; color: black; font-weight: bold;")
         self.btn_ready.setFixedHeight(40)
-        self.btn_ready.clicked.connect(lambda: [self.worker.call_service('start_servo'), self.worker.trigger_hover_state(self.canvas_w, self.canvas_h)])
+        self.btn_ready.clicked.connect(self.on_btn_ready_clicked)
         
         self.btn_start = QPushButton("START TRAJECTORY")
         self.btn_start.setStyleSheet("background-color: #63E363; color: black; font-weight: bold;")
@@ -391,7 +409,7 @@ class DashboardClient(QMainWindow):
         self.btn_stop = QPushButton("STOP TRACKING")
         self.btn_stop.setStyleSheet("background-color: #FC657C; color: black; font-weight: bold;")
         self.btn_stop.setFixedHeight(40)
-        self.btn_stop.clicked.connect(self.worker.trigger_stop_state)
+        self.btn_stop.clicked.connect(self.on_btn_stop_clicked)
         
         btn_layout.addWidget(self.btn_clear); btn_layout.addWidget(self.btn_ready); btn_layout.addWidget(self.btn_start); btn_layout.addWidget(self.btn_stop)
         layout.addLayout(btn_layout)
@@ -543,9 +561,23 @@ class DashboardClient(QMainWindow):
                 self.update_result_log(True, "MoveIt Servo Started.")
         else:
             if self.servo_active_flag:
+                self.worker.send_zero_jog()
                 self.worker.call_service('stop_servo')
                 self.servo_active_flag = False
                 self.update_result_log(True, "MoveIt Servo Stopped (Standard Planning Mode).")
+    
+    def on_btn_ready_clicked(self):
+        if not self.servo_active_flag:
+            self.worker.call_service('start_servo')
+            self.servo_active_flag = True
+        self.worker.trigger_hover_state(self.canvas_w, self.canvas_h)
+
+    def on_btn_stop_clicked(self):
+        self.worker.trigger_stop_state()
+        if self.servo_active_flag:
+            self.worker.call_service('stop_servo')
+            self.servo_active_flag = False
+            self.update_result_log(True, "Tracking Stopped. MoveIt Servo Frozen.")
 
     def sync_velocity_sliders(self, value):
         self.worker.current_vel_scale = float(value) / 100.0
@@ -600,6 +632,8 @@ class DashboardClient(QMainWindow):
         if not points:
             self.update_result_log(False, "Canvas is empty!")
             return
+
+        self.worker.set_tracking_ready_mode(True)
         self.btn_start.setEnabled(False)
         self.lbl_action_status.setText("Status: Sending Goal...")
         self.worker.send_drawing_goal(points, scale_factor=0.0004)
