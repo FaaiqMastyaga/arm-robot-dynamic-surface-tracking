@@ -53,11 +53,10 @@ class RosFrontendWorker(QThread):
         # --- Publishers ---
         self.jog_pub = self.node.create_publisher(JogCommand, '/dashboard/jog_cmds', 10)
         self.tracking_mode_pub = self.node.create_publisher(Bool, '/tracking_active_flag', 10)
-        
-        # Restored Publishers for Direct Goals
         self.cart_publisher_ = self.node.create_publisher(PoseStamped, '/cart_goal', 10)
         self.joint_publisher_ = self.node.create_publisher(JointState, '/joint_goal', 10)
         self.vel_publisher_ = self.node.create_publisher(Float32, '/vel', 10)
+        self.desired_pose_pub_ = self.node.create_publisher(PoseStamped, '/desired_drawing_pose', 10)
         self.tf_static_broadcaster_ = StaticTransformBroadcaster(self.node)
 
         # --- Subscribers ---
@@ -98,13 +97,6 @@ class RosFrontendWorker(QThread):
         else:
             self.service_response_signal.emit(False, f"Service {action_name} not available")
 
-    def set_tracking_ready_mode(self, active):
-        msg = Bool()
-        msg.data = active
-        self.tracking_mode_pub.publish(msg)
-        self.service_response_signal.emit(True, f"Tracking Ready Mode: {'ON' if active else 'OFF'}")
-
-    # --- Restored Publishing Methods ---
     def publish_cart_goal(self, pos, orient, frame_id):
         q = np.array(orient)
         norm = np.linalg.norm(q)
@@ -138,7 +130,48 @@ class RosFrontendWorker(QThread):
         t.transform.rotation.x, t.transform.rotation.y, t.transform.rotation.z, t.transform.rotation.w = orient
         self.tf_static_broadcaster_.sendTransform(t)
 
+    def set_tracking_ready_mode(self, active):
+        msg = Bool()
+        msg.data = active
+        self.tracking_mode_pub.publish(msg)
+        self.service_response_signal.emit(True, f"Tracking Ready Mode: {'ON' if active else 'OFF'}")
+
     # --- Action Handling ---
+    def trigger_hover_state(self, canvas_w, canvas_h):
+        # 1. Turn on the tracking flag
+        msg = Bool()
+        msg.data = True
+        self.tracking_mode_pub.publish(msg)
+        
+        # 2. Publish a central hover pose to overwrite the "last known" point
+        hover = PoseStamped()
+        hover.header.stamp = self.node.get_clock().now().to_msg()
+        hover.header.frame_id = "whiteboard"
+        
+        # Center of the canvas, 5cm above the board
+        hover.pose.position.x = 0.0 # Assuming (0,0) is center
+        hover.pose.position.y = 0.0
+        hover.pose.position.z = 0.05 
+        
+        # Simple straight down orientation
+        hover.pose.orientation.x = 0.0
+        hover.pose.orientation.y = 1.0
+        hover.pose.orientation.z = 0.0
+        hover.pose.orientation.w = 0.0
+        
+        self.desired_pose_pub_.publish(hover)
+        self.service_response_signal.emit(True, "Robot moving to Hover position.")
+
+    def trigger_stop_state(self):
+        # 1. Turn off the tracking flag (Stops C++ node math)
+        msg = Bool()
+        msg.data = False
+        self.tracking_mode_pub.publish(msg)
+        
+        # 2. Hard-stop MoveIt Servo to freeze the robot in place
+        self.call_service('stop_servo')
+        self.service_response_signal.emit(True, "Tracking Stopped. Robot Frozen.")
+
     def send_drawing_goal(self, points_3d, scale_factor):
         if not self.draw_client.wait_for_server(timeout_sec=1.0):
             self.action_result_signal.emit(False, "Backend Action Server Offline!")
@@ -341,14 +374,25 @@ class DashboardClient(QMainWindow):
         layout.addLayout(status_layout)
 
         btn_layout = QHBoxLayout()
-        self.btn_clear = QPushButton("CLEAR CANVAS"); self.btn_clear.setFixedHeight(40) 
+        self.btn_clear = QPushButton("CLEAR CANVAS")
+        self.btn_clear.setFixedHeight(40) 
         self.btn_clear.clicked.connect(lambda: [self.canvas.lines.clear(), self.canvas.update(), self.worker.call_service('clear_rviz')])
-        self.btn_ready = QPushButton("READY (HOVER)"); self.btn_ready.setStyleSheet("background-color: #87CEFA; color: black; font-weight: bold;"); self.btn_ready.setFixedHeight(40) 
-        self.btn_ready.clicked.connect(lambda: self.worker.set_tracking_ready_mode(True))
-        self.btn_start = QPushButton("START TRAJECTORY"); self.btn_start.setStyleSheet("background-color: #63E363; color: black; font-weight: bold;"); self.btn_start.setFixedHeight(40) 
+        
+        self.btn_ready = QPushButton("READY (HOVER)")
+        self.btn_ready.setStyleSheet("background-color: #87CEFA; color: black; font-weight: bold;")
+        self.btn_ready.setFixedHeight(40)
+        self.btn_ready.clicked.connect(lambda: [self.worker.call_service('start_servo'), self.worker.trigger_hover_state(self.canvas_w, self.canvas_h)])
+        
+        self.btn_start = QPushButton("START TRAJECTORY")
+        self.btn_start.setStyleSheet("background-color: #63E363; color: black; font-weight: bold;")
+        self.btn_start.setFixedHeight(40) 
         self.btn_start.clicked.connect(self.trigger_robot)
-        self.btn_stop = QPushButton("STOP TRACKING"); self.btn_stop.setStyleSheet("background-color: #FC657C; color: black; font-weight: bold;"); self.btn_stop.setFixedHeight(40) 
-        self.btn_stop.clicked.connect(lambda: self.worker.set_tracking_ready_mode(False))
+
+        self.btn_stop = QPushButton("STOP TRACKING")
+        self.btn_stop.setStyleSheet("background-color: #FC657C; color: black; font-weight: bold;")
+        self.btn_stop.setFixedHeight(40)
+        self.btn_stop.clicked.connect(self.worker.trigger_stop_state)
+        
         btn_layout.addWidget(self.btn_clear); btn_layout.addWidget(self.btn_ready); btn_layout.addWidget(self.btn_start); btn_layout.addWidget(self.btn_stop)
         layout.addLayout(btn_layout)
         return w
@@ -485,6 +529,13 @@ class DashboardClient(QMainWindow):
         # Index 3 = Jogging (Requires Servo for manual teleop)
         SERVO_TABS = [0, 3] 
         
+        # If we leave the Canvas tab, instantly tell the controller node to stop tracking math
+        if index != 0:
+            msg = Bool()
+            msg.data = False
+            self.worker.tracking_mode_pub.publish(msg)
+
+        # --- MoveIt Servo Lifecycle ---
         if index in SERVO_TABS:
             if not self.servo_active_flag:
                 self.worker.call_service('start_servo')
