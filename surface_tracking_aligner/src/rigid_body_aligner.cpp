@@ -236,7 +236,7 @@ private:
                                 try {
                                     // Match the TF lookup to the exact camera timestamp
                                     geometry_msgs::msg::TransformStamped tf_msg = tf_buffer->lookupTransform(
-                                        "elfin_base_link", "elfin_end_link", msg->header.stamp, rclcpp::Duration::from_seconds(0.1));
+                                        "elfin_base_link", "marker_holder_link", msg->header.stamp, rclcpp::Duration::from_seconds(0.1));
                                     
                                     // Convert ROS msg to Eigen
                                     Eigen::Isometry3d T_ee_to_base = tf2::transformToEigen(tf_msg);
