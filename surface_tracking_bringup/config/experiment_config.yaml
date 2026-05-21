@@ -1,5 +1,7 @@
 global_experiment_manager:
   ros__parameters:
+    use_sim: true
+
     # --- Active Hardware Definitions ---
     active_camera_aligner: robot_base
     active_target_platform: target_platform
