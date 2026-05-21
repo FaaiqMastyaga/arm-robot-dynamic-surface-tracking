@@ -38,11 +38,19 @@ end_effector:
        -0.049922,  0.049922,  0.028000,
         0.046386,  0.046386,  0.028000,
     ]
-    ordered_cad_points: []
+    ordered_cad_points: [
+        0.046386,  0.046386,  0.028000,
+       -0.049922,  0.049922,  0.028000,
+        0.000000,  0.030000,  0.047100,
+        0.049736, -0.052000,  0.105104,
+       -0.048016, -0.038000,  0.085606,
+    ]
     marker_distances: [
         0.000000,
     ]
-    ordered_marker_distances: []
+    ordered_marker_distances: [
+        0.000000,
+    ]
 
 target_platform:
   ros__parameters:
