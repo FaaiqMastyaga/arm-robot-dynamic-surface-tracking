@@ -1,4 +1,5 @@
 #include <rclcpp/rclcpp.hpp>
+#include <rcl_interfaces/msg/set_parameters_result.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/twist_stamped.hpp>
 #include <tf2_ros/buffer.h>
@@ -14,6 +15,7 @@
 #include <chrono>
 #include <vector>
 #include <algorithm>
+#include <memory>
 
 using namespace std::chrono_literals;
 
@@ -33,32 +35,25 @@ public:
         this->declare_parameter<double>("max_cmd_vel", 0.5);
         this->declare_parameter<double>("max_integral", 1.0);
 
-        // Fetch Parameter
-        std::string controller_type = this->get_parameter("controller_type").as_string();
+        // Fetch Parameter into class members
+        controller_type_ = this->get_parameter("controller_type").as_string();
         double control_loop_rate = this->get_parameter("control_loop_rate").as_double();
-        double kp = this->get_parameter("kp").as_double();
-        double ki = this->get_parameter("ki").as_double();
-        double kd = this->get_parameter("kd").as_double();
-        double k_ff = this->get_parameter("k_ff").as_double();
+        kp_ = this->get_parameter("kp").as_double();
+        ki_ = this->get_parameter("ki").as_double();
+        kd_ = this->get_parameter("kd").as_double();
+        k_ff_ = this->get_parameter("k_ff").as_double();
         max_cmd_vel_ = this->get_parameter("max_cmd_vel").as_double();
-        double max_integral = this->get_parameter("max_integral").as_double();
+        max_integral_ = this->get_parameter("max_integral").as_double();
 
         double control_loop_period = 1000.0 / control_loop_rate;
 
-        // Initialize controller
-        if (controller_type == "pid") {
-            for (int i = 0; i < 6; ++i) {
-                siso_controllers_.push_back(std::make_unique<PidController>(kp, ki, kd, max_integral));
-            }
-        }
-        else if (controller_type == "pid_ff") {
-            for (int i = 0; i < 6; ++i) {
-                siso_controllers_.push_back(std::make_unique<PidFeedforwardController>(kp, ki, kd, k_ff, max_integral));
-            }
-        }
-        else if (controller_type == "mpc") {
-            // mimo_controller_ = std::make_unique<MpcController>();
-        }
+        // Initialize controllers
+        init_controllers();
+
+        // Setup Parameter Callback for dynamic updates
+        param_callback_handle_ = this->add_on_set_parameters_callback(
+            std::bind(&DynamicTracker::parameters_callback, this, std::placeholders::_1)
+        );
 
         // Setup TF Buffer and Listener
         tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
@@ -90,7 +85,8 @@ public:
             std::bind(&DynamicTracker::control_loop, this)
         );
 
-        RCLCPP_INFO(this->get_logger(), "Dynamic Tracking node loaded. Controller: %s", controller_type.c_str());    }
+        RCLCPP_INFO(this->get_logger(), "Dynamic Tracking node loaded. Controller: %s", controller_type_.c_str());    
+    }
     
 private:
     // --- State Caches ---
@@ -98,6 +94,10 @@ private:
     geometry_msgs::msg::TwistStamped latest_target_twist_;
     bool has_target_pose_ = false;
     bool has_target_twist_ = false;
+
+    // --- Control Parameters ---
+    std::string controller_type_;
+    double kp_, ki_, kd_, k_ff_, max_cmd_vel_, max_integral_;
 
     // Vector of 6 controllers for cartesian space
     std::vector<std::unique_ptr<surface_tracking_controller::SISOControllerBase>> siso_controllers_;
@@ -110,9 +110,70 @@ private:
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr planner_pose_sub_; 
     rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr target_twist_sub_; 
     rclcpp::TimerBase::SharedPtr control_timer_;
+    rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_callback_handle_;
 
     rclcpp::Time last_time_;
-    double max_cmd_vel_;
+
+    void init_controllers() 
+    {
+        siso_controllers_.clear();
+        
+        if (controller_type_ == "pid") {
+            for (int i = 0; i < 6; ++i) {
+                siso_controllers_.push_back(std::make_unique<PidController>(kp_, ki_, kd_, max_integral_));
+            }
+        }
+        else if (controller_type_ == "pid_ff") {
+            for (int i = 0; i < 6; ++i) {
+                siso_controllers_.push_back(std::make_unique<PidFeedforwardController>(kp_, ki_, kd_, k_ff_, max_integral_));
+            }
+        }
+        else if (controller_type_ == "mpc") {
+            // mimo_controller_ = std::make_unique<MpcController>();
+        }
+    }
+
+    rcl_interfaces::msg::SetParametersResult parameters_callback(const std::vector<rclcpp::Parameter> &parameters) 
+    {
+        rcl_interfaces::msg::SetParametersResult result;
+        result.successful = true;
+        result.reason = "success";
+
+        bool reinit_controllers = false;
+
+        for (const auto &param : parameters) {
+            if (param.get_name() == "kp") {
+                kp_ = param.as_double();
+                reinit_controllers = true;
+            } else if (param.get_name() == "ki") {
+                ki_ = param.as_double();
+                reinit_controllers = true;
+            } else if (param.get_name() == "kd") {
+                kd_ = param.as_double();
+                reinit_controllers = true;
+            } else if (param.get_name() == "k_ff") {
+                k_ff_ = param.as_double();
+                reinit_controllers = true;
+            } else if (param.get_name() == "max_integral") {
+                max_integral_ = param.as_double();
+                reinit_controllers = true;
+            } else if (param.get_name() == "max_cmd_vel") {
+                max_cmd_vel_ = param.as_double();
+            } else if (param.get_name() == "controller_type") {
+                controller_type_ = param.as_string();
+                reinit_controllers = true;
+            }
+        }
+
+        // Recreate the controllers if gain or type parameters changed
+        if (reinit_controllers) {
+            init_controllers();
+            RCLCPP_INFO(this->get_logger(), "Updated controller parameters. (Type: %s, Kp: %.2f, Ki: %.2f, Kd: %.2f, K_ff: %.2f)", 
+                        controller_type_.c_str(), kp_, ki_, kd_, k_ff_);
+        }
+
+        return result;
+    }
 
     void control_loop()
     {
@@ -168,7 +229,7 @@ private:
             double err_p = std::atan2(std::sin(tp - cp), std::cos(tp - cp));
             double err_y = std::atan2(std::sin(ty - cy), std::cos(ty - cy));
 
-            // Create a modified target which is the shortest path awau from current
+            // Create a modified target which is the shortest path away from current
             double tr_adj = cr + err_r;
             double tp_adj = cp + err_p;
             double ty_adj = cy + err_y;
@@ -197,8 +258,6 @@ private:
             servo_twist_pub_->publish(cmd_twist);
 
         } catch (const tf2::TransformException& ex) {
-            // If the Aimooe tracker is blocked by your hand, this safely catches the error
-            // and drops the point, preventing the robot from moving unpredictably.
             RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000, 
                 "Tracking occluded! Waiting for Aimooe TF: %s", ex.what());
 
@@ -220,7 +279,6 @@ int main(int argc, char * argv[])
 {
     rclcpp::init(argc, argv);
     
-    // Create the node options and spin the node
     rclcpp::NodeOptions options;
     auto node = std::make_shared<surface_tracking_controller::DynamicTracker>(options);
     
