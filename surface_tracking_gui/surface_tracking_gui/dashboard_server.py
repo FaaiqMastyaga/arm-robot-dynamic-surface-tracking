@@ -25,7 +25,7 @@ class DashboardServer(Node):
 
         # --- Frame Definitions ---
         self.base_frame = 'elfin_base_link'
-        self.ee_frame = 'elfin_end_link'
+        self.tip_frame = 'pen_tip_link'
 
         # --- Internal State ---
         self.status_msg = DashboardStatus()
@@ -158,7 +158,7 @@ class DashboardServer(Node):
     def high_frequency_loop(self):
         try:
             # 1. Lookup TF safely
-            t_tf = self.tf_buffer.lookup_transform(self.base_frame, self.ee_frame, rclpy.time.Time())
+            t_tf = self.tf_buffer.lookup_transform(self.base_frame, self.tip_frame, rclpy.time.Time())
             
             # 2. Update Status Message for GUI
             self.status_msg.x = t_tf.transform.translation.x

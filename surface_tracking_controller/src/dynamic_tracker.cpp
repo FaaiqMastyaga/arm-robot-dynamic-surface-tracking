@@ -128,7 +128,7 @@ private:
         // Base frame for the robot (Fixed reference)
         const std::string base_frame = "elfin_base_link";
         // End effector frame (the moving part)
-        const std::string ee_frame = "elfin_end_link";
+        const std::string ee_frame = "pen_tip_link";
 
         try {
             // Transform Target Pose to Base Frame (P_target)

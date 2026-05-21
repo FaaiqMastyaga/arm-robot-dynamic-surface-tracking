@@ -149,9 +149,9 @@ class RosFrontendWorker(QThread):
         
         # Simple straight down orientation
         hover.pose.orientation.x = 0.0
-        hover.pose.orientation.y = 1.0
+        hover.pose.orientation.y = 0.0
         hover.pose.orientation.z = 0.0
-        hover.pose.orientation.w = 0.0
+        hover.pose.orientation.w = 1.0
         
         self.desired_pose_pub_.publish(hover)
         self.service_response_signal.emit(True, "Robot moving to Hover position.")
@@ -602,7 +602,7 @@ class DashboardClient(QMainWindow):
 
     def start_jog(self, jtype, axis, direction):
         frame = 'elfin_base_link'
-        if jtype == 'cart' and self.jog_frame_btn_group.checkedId() == 1: frame = 'elfin_end_link'
+        if jtype == 'cart' and self.jog_frame_btn_group.checkedId() == 1: frame = 'pen_tip_link'
         self.active_jog = (jtype, axis, direction, frame)
         self.jog_timer.start()
 

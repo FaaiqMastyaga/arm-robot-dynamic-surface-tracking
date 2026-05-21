@@ -162,7 +162,7 @@ class TrajectoryGenerator(Node):
             target_yaw = 0.0 # Fallback
 
             try:
-                t = self.tf_buffer.lookup_transform("whiteboard", "elfin_end_link", rclpy.time.Time())
+                t = self.tf_buffer.lookup_transform("whiteboard", "pen_tip_link", rclpy.time.Time())
                 _, _, current_yaw = euler_from_quaternion(t.transform.rotation.x, t.transform.rotation.y, t.transform.rotation.z, t.transform.rotation.w)
                 target_yaw = current_yaw  # Keep the pen orientation aligned with the robot's current facing direction
             except Exception:
