@@ -12,7 +12,9 @@ def generate_launch_description():
     elfin10_l_ros2_moveit2_dir = get_package_share_directory('elfin10_l_ros2_moveit2')
     aligner_dir = get_package_share_directory('surface_tracking_aligner')
     visualization_dir = get_package_share_directory('surface_tracking_visualization')
+    gui_dir = get_package_share_directory('surface_tracking_gui')
     estimator_dir = get_package_share_directory('surface_tracking_estimator')
+    planner_dir = get_package_share_directory('surface_tracking_planner')
     controller_dir = get_package_share_directory('surface_tracking_controller')
 
     global_yaml_path = os.path.join(bringup_dir, 'config', 'experiment_config.yaml')
@@ -20,6 +22,9 @@ def generate_launch_description():
     with open(global_yaml_path, 'r') as file:
         global_config = yaml.safe_load(file)['global_experiment_manager']['ros__parameters']
 
+    # --- Fetch Parameters ---
+    use_sim = global_config.get('use_sim', True)  # Default to True if not found
+    
     number_of_markers = global_config['number_of_markers']
     marker_configuration = global_config['marker_configuration']
     active_camera = global_config['active_camera_aligner']
@@ -32,7 +37,6 @@ def generate_launch_description():
     base_frame = global_config.get('base_frame', 'elfin_base_link')
 
     # --- 1. Define Calibration Processes ---
-    # We use ExecuteProcess to run the calibration launch file as if from the terminal
     calibrate_aligner = ExecuteProcess(
         cmd=['ros2', 'launch', 'surface_tracking_aligner', 'calibration.launch.py', 'target:=aligner'],
         output='screen'
@@ -43,19 +47,11 @@ def generate_launch_description():
         output='screen'
     )
 
-    # --- 2. Define the Main System Nodes ---
+    # --- 2. Define Tracking & Control Nodes ---
     tools_list_str = f"['{active_camera}', '{active_target}']"
     aimooe_tracker_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(aimooe_ros2_dir, 'launch', 'aimooe_tracker.launch.py')),
         launch_arguments={'tools_to_track': tools_list_str}.items()
-    )
-
-    elfin10_l_sim_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(elfin10_l_ros2_moveit2_dir, 'launch', 'elfin10_l.launch.py'))
-    )
-
-    elfin10_l_basic_api_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(elfin10_l_ros2_moveit2_dir, 'launch', 'elfin10_l_basic_api.launch.py'))
     )
 
     aligner_launch = IncludeLaunchDescription(
@@ -68,37 +64,60 @@ def generate_launch_description():
         launch_arguments={'active_camera': active_camera, 'active_target': active_target}.items()
     )
 
+    dashboard_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(os.path.join(gui_dir, 'launch', 'dashboard.launch.py')),
+        launch_arguments={'use_sim_time': 'true' if use_sim else 'false'}.items()
+    )
+
     estimator_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(estimator_dir, 'launch', 'velocity_estimator.launch.py')),
-        launch_arguments={
-            'target_frame': task_frame,
-            'base_frame': base_frame
-        }.items()
+        launch_arguments={'target_frame': task_frame, 'base_frame': base_frame}.items()
+    )
+
+    trajectory_generator_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(os.path.join(planner_dir, 'launch', 'trajectory_generator.launch.py'))
     )
 
     controller_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(controller_dir, 'launch', 'dynamic_tracker.launch.py')),
-        launch_arguments={
-            'filter_type': filter_type,
-            'controller_type': controller_type
-        }.items()
+        launch_arguments={'filter_type': filter_type, 'controller_type': controller_type}.items()
     )
 
-    # Group the main system so we can launch it all at once later
+    # --- 3. Conditional Robot Hardware/Sim Bringup ---
+    robot_bringup_actions = []
+    
+    if use_sim:
+        robot_bringup_actions.append(LogInfo(msg=">>> Launching Elfin SIMULATION Environment <<<"))
+        robot_bringup_actions.append(IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(os.path.join(elfin10_l_ros2_moveit2_dir, 'launch', 'elfin10_l.launch.py'))
+        ))
+        robot_bringup_actions.append(IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(os.path.join(elfin10_l_ros2_moveit2_dir, 'launch', 'elfin10_l_basic_api.launch.py'))
+        ))
+    else:
+        robot_bringup_actions.append(LogInfo(msg=">>> Launching Elfin REAL HARDWARE Environment <<<"))
+        # 1. MoveGroup, RViz, and Servo (The file we edited previously)
+        robot_bringup_actions.append(IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(os.path.join(elfin10_l_ros2_moveit2_dir, 'launch', 'elfin10_l_moveit_rviz.launch.py'))
+        ))
+        # 2. Elfin Basic API
+        robot_bringup_actions.append(IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(os.path.join(elfin10_l_ros2_moveit2_dir, 'launch', 'elfin10_l_basic_api.launch.py'))
+        ))
+
+    # Group the main system
     main_system_actions = [
         LogInfo(msg="=== Calibrations Complete! Launching Main System ==="),
         aimooe_tracker_launch,
-        elfin10_l_sim_launch,
-        elfin10_l_basic_api_launch,
         aligner_launch,
         visualizer_launch,
         estimator_launch,
-        controller_launch
-    ]
+        controller_launch,
+        trajectory_generator_launch,
+        dashboard_launch
+    ] + robot_bringup_actions
 
-    # --- 3. Build the Execution Chain ---
-    
-    # Event C: When Platform Calibration exits -> Launch the Main System
+    # --- 4. Build the Execution Chain ---
     platform_exit_handler = RegisterEventHandler(
         OnProcessExit(
             target_action=calibrate_platform,
@@ -106,7 +125,6 @@ def generate_launch_description():
         )
     )
 
-    # Event B: When Aligner Calibration exits -> Launch Platform Calibration AND its listener
     aligner_exit_handler = RegisterEventHandler(
         OnProcessExit(
             target_action=calibrate_aligner,
@@ -118,7 +136,6 @@ def generate_launch_description():
         )
     )
 
-    # Event A: The Initial Launch Description only starts the VERY FIRST action and its listener
     return LaunchDescription([
         LogInfo(msg="=== Starting Aligner Calibration ==="),
         calibrate_aligner,
