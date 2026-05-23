@@ -32,7 +32,8 @@ public:
         this->declare_parameter<double>("ki", 0.0);
         this->declare_parameter<double>("kd", 0.0);
         this->declare_parameter<double>("k_ff", 0.0);
-        this->declare_parameter<double>("max_cmd_vel", 0.5);
+        this->declare_parameter<double>("max_linear_vel", 0.4);
+        this->declare_parameter<double>("max_angular_vel", 0.8);
         this->declare_parameter<double>("max_integral", 1.0);
 
         // Fetch Parameter into class members
@@ -42,7 +43,8 @@ public:
         ki_ = this->get_parameter("ki").as_double();
         kd_ = this->get_parameter("kd").as_double();
         k_ff_ = this->get_parameter("k_ff").as_double();
-        max_cmd_vel_ = this->get_parameter("max_cmd_vel").as_double();
+        max_linear_vel_ = this->get_parameter("max_linear_vel").as_double();
+        max_angular_vel_ = this->get_parameter("max_angular_vel").as_double();
         max_integral_ = this->get_parameter("max_integral").as_double();
 
         double control_loop_period = 1000.0 / control_loop_rate;
@@ -97,7 +99,7 @@ private:
 
     // --- Control Parameters ---
     std::string controller_type_;
-    double kp_, ki_, kd_, k_ff_, max_cmd_vel_, max_integral_;
+    double kp_, ki_, kd_, k_ff_, max_linear_vel_, max_angular_vel_, max_integral_;
 
     // Vector of 6 controllers for cartesian space
     std::vector<std::unique_ptr<surface_tracking_controller::SISOControllerBase>> siso_controllers_;
@@ -157,8 +159,10 @@ private:
             } else if (param.get_name() == "max_integral") {
                 max_integral_ = param.as_double();
                 reinit_controllers = true;
-            } else if (param.get_name() == "max_cmd_vel") {
-                max_cmd_vel_ = param.as_double();
+            } else if (param.get_name() == "max_linear_vel") {
+                max_linear_vel_ = param.as_double();
+            } else if (param.get_name() == "max_angular_vel") {
+                max_angular_vel_ = param.as_double();
             } else if (param.get_name() == "controller_type") {
                 controller_type_ = param.as_string();
                 reinit_controllers = true;
@@ -209,30 +213,35 @@ private:
             double current_y = current_transform.transform.translation.y;
             double current_z = current_transform.transform.translation.z;
 
-            tf2::Quaternion current_q;
-            tf2::fromMsg(current_transform.transform.rotation, current_q);
-            double cr, cp, cy;
-            tf2::Matrix3x3(current_q).getRPY(cr, cp, cy);
+            tf2::Quaternion q_current;
+            tf2::fromMsg(current_transform.transform.rotation, q_current);
 
             // Extract cartesian setpoint (target)
             double setpoint_x = target_in_base.pose.position.x;
             double setpoint_y = target_in_base.pose.position.y;
             double setpoint_z = target_in_base.pose.position.z;
 
-            tf2::Quaternion target_q;
-            tf2::fromMsg(target_in_base.pose.orientation, target_q);
-            double tr, tp, ty;
-            tf2::Matrix3x3(target_q).getRPY(tr, tp, ty);
+            tf2::Quaternion q_target;
+            tf2::fromMsg(target_in_base.pose.orientation, q_target);
 
-            // Calculate the shortest angular distance (error)
-            double err_r = std::atan2(std::sin(tr - cr), std::cos(tr - cr));
-            double err_p = std::atan2(std::sin(tp - cp), std::cos(tp - cp));
-            double err_y = std::atan2(std::sin(ty - cy), std::cos(ty - cy));
+            // Calculate quaternion error
+            tf2::Quaternion q_error = q_target * q_current.inverse();
 
-            // Create a modified target which is the shortest path away from current
-            double tr_adj = cr + err_r;
-            double tp_adj = cp + err_p;
-            double ty_adj = cy + err_y;
+            // Extract axis-angle from quaternion error
+            tf2::Vector3 axis = q_error.getAxis();
+            double angle = q_error.getAngle();
+
+            // Normalize angle to [-pi, pi]
+            if (angle > M_PI) {
+                angle -= 2.0 * M_PI;
+            } else if (angle < -M_PI) {
+                angle += 2.0 * M_PI;
+            }
+
+            // Calculate vector of orientation error (scaled by angle)
+            double err_rx = axis.x() * angle; // Roll error
+            double err_ry = axis.y() * angle; // Pitch error
+            double err_rz = axis.z() * angle; // Yaw error
 
             // Extract feedforward velocity (if available, else 0)
             double ff_vx = has_target_twist_ ? latest_target_twist_.twist.linear.x : 0.0;
@@ -242,18 +251,44 @@ private:
             double ff_wy = has_target_twist_ ? latest_target_twist_.twist.angular.y : 0.0;
             double ff_wz = has_target_twist_ ? latest_target_twist_.twist.angular.z : 0.0;
             
-            // Calculate command twist
+            // Calculate raw output from controllers (before clamping)
+            double vx = siso_controllers_[0]->update_with_ff(current_x, setpoint_x, ff_vx, dt);
+            double vy = siso_controllers_[1]->update_with_ff(current_y, setpoint_y, ff_vy, dt);
+            double vz = siso_controllers_[2]->update_with_ff(current_z, setpoint_z, ff_vz, dt);
+
+            double wx = siso_controllers_[3]->update_with_ff(0.0, err_rx, ff_wx, dt);
+            double wy = siso_controllers_[4]->update_with_ff(0.0, err_ry, ff_wy, dt);
+            double wz = siso_controllers_[5]->update_with_ff(0.0, err_rz, ff_wz, dt);
+            
+            // Clamp the output to max command velocity limits
+            double v_norm = std::sqrt(vx*vx + vy*vy + vz*vz);
+            if (v_norm > max_linear_vel_) {
+                double scale = max_linear_vel_ / v_norm;
+                vx *= scale;
+                vy *= scale;
+                vz *= scale;
+            }
+            
+            double w_norm = std::sqrt(wx*wx + wy*wy + wz*wz);
+            if (w_norm > max_angular_vel_) {
+                double scale = max_angular_vel_ / w_norm;
+                wx *= scale;
+                wy *= scale;
+                wz *= scale;
+            }
+
+            // Publish the command twist
             geometry_msgs::msg::TwistStamped cmd_twist;
             cmd_twist.header.stamp = current_time;
             cmd_twist.header.frame_id = base_frame; 
 
-            cmd_twist.twist.linear.x = std::clamp(siso_controllers_[0]->update_with_ff(current_x, setpoint_x, ff_vx, dt), -max_cmd_vel_, max_cmd_vel_);
-            cmd_twist.twist.linear.y = std::clamp(siso_controllers_[1]->update_with_ff(current_y, setpoint_y, ff_vy, dt), -max_cmd_vel_, max_cmd_vel_);
-            cmd_twist.twist.linear.z = std::clamp(siso_controllers_[2]->update_with_ff(current_z, setpoint_z, ff_vz, dt), -max_cmd_vel_, max_cmd_vel_);
+            cmd_twist.twist.linear.x = vx;
+            cmd_twist.twist.linear.y = vy;
+            cmd_twist.twist.linear.z = vz;
             
-            cmd_twist.twist.angular.x = std::clamp(siso_controllers_[3]->update_with_ff(cr, tr_adj, ff_wx, dt), -max_cmd_vel_, max_cmd_vel_);
-            cmd_twist.twist.angular.y = std::clamp(siso_controllers_[4]->update_with_ff(cp, tp_adj, ff_wy, dt), -max_cmd_vel_, max_cmd_vel_);
-            cmd_twist.twist.angular.z = std::clamp(siso_controllers_[5]->update_with_ff(cy, ty_adj, ff_wz, dt), -max_cmd_vel_, max_cmd_vel_);
+            cmd_twist.twist.angular.x = wx;
+            cmd_twist.twist.angular.y = wy;
+            cmd_twist.twist.angular.z = wz;
 
             servo_twist_pub_->publish(cmd_twist);
 

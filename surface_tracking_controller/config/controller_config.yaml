@@ -1,14 +1,16 @@
 /**:
   ros__parameters:
-    controller_type: "pid"   # Options: pid, pid_ff, mpc
+    controller_type: "pid_ff"   # Options: pid, pid_ff, mpc
     control_loop_rate: 100.0
-    max_cmd_vel: 10.0
+    max_linear_vel: 0.4
+    max_angular_vel: 0.8
+
 
     # PID & PID Feedforward Tuning
-    kp: 10.0
+    kp: 4.0
     ki: 0.0
     kd: 0.0
-    k_ff: 10.0
+    k_ff: 1.0
     max_integral: 1.0
 
     # MPC Tuning
