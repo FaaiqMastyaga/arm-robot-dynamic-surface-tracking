@@ -9,13 +9,13 @@ import numpy as np
 import rclpy
 from ament_index_python.packages import get_package_share_directory
 from rclpy.node import Node
-from std_msgs.msg import Float32
+from std_msgs.msg import Float32, Bool
 from geometry_msgs.msg import Point, PoseStamped, TransformStamped
 from sensor_msgs.msg import JointState
-from std_msgs.msg import Bool
 from std_srvs.srv import SetBool, Trigger
 from rclpy.action import ActionClient
 from tf2_ros import StaticTransformBroadcaster
+from controller_manager_msgs.srv import SwitchController
 
 # Custom Interfaces
 from surface_tracking_interfaces.msg import DashboardStatus, JogCommand
@@ -73,6 +73,7 @@ class RosFrontendWorker(QThread):
             'start_servo': self.node.create_client(Trigger, '/servo_node/start_servo'),
             'stop_servo': self.node.create_client(Trigger, '/servo_node/stop_servo')
         }
+        self.switch_controller_client = self.node.create_client(SwitchController, '/controller_manager/switch_controller')
 
         # --- Action Client ---
         self.draw_client = ActionClient(self.node, DrawTrajectory, 'execute_drawing')
@@ -131,6 +132,27 @@ class RosFrontendWorker(QThread):
         self.tf_static_broadcaster_.sendTransform(t)
 
     # --- Action Handling ---
+    def switch_hardware_controller(self, activate_target, deactivate_target):
+        if not self.switch_controller_client.wait_for_service(timeout_sec=1.0):
+            self.service_response_signal.emit(False, "Controller Manager Offline!")
+            return
+            
+        req = SwitchController.Request()
+        req.activate_controllers = [activate_target]
+        req.deactivate_controllers = [deactivate_target]
+        req.strictness = SwitchController.Request.STRICT
+        
+        future = self.switch_controller_client.call_async(req)
+        
+        def _cb(f):
+            res = f.result()
+            if res.ok:
+                self.service_response_signal.emit(True, f"Hardware Mode: {activate_target}")
+            else:
+                self.service_response_signal.emit(False, f"Failed to switch to {activate_target}!")
+                
+        future.add_done_callback(_cb)
+
     def trigger_hover_state(self, canvas_w, canvas_h):
         # 1. Turn on the tracking flag
         msg = Bool()
@@ -556,6 +578,7 @@ class DashboardClient(QMainWindow):
         # --- MoveIt Servo Lifecycle ---
         if index in SERVO_TABS:
             if not self.servo_active_flag:
+                self.worker.switch_hardware_controller('elfin_servo_controller', 'elfin_arm_controller')
                 self.worker.call_service('start_servo')
                 self.servo_active_flag = True
                 self.update_result_log(True, "MoveIt Servo Started.")
@@ -563,21 +586,17 @@ class DashboardClient(QMainWindow):
             if self.servo_active_flag:
                 self.worker.send_zero_jog()
                 self.worker.call_service('stop_servo')
+                self.worker.switch_hardware_controller('elfin_arm_controller', 'elfin_servo_controller')
                 self.servo_active_flag = False
                 self.update_result_log(True, "MoveIt Servo Stopped (Standard Planning Mode).")
     
     def on_btn_ready_clicked(self):
-        if not self.servo_active_flag:
-            self.worker.call_service('start_servo')
-            self.servo_active_flag = True
         self.worker.trigger_hover_state(self.canvas_w, self.canvas_h)
 
     def on_btn_stop_clicked(self):
         self.worker.trigger_stop_state()
-        if self.servo_active_flag:
-            self.worker.call_service('stop_servo')
-            self.servo_active_flag = False
-            self.update_result_log(True, "Tracking Stopped. MoveIt Servo Frozen.")
+        self.worker.send_zero_jog()
+        self.update_result_log(True, "Tracking Stopped. MoveIt Servo Frozen.")
 
     def sync_velocity_sliders(self, value):
         self.worker.current_vel_scale = float(value) / 100.0
