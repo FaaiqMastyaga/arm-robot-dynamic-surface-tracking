@@ -157,7 +157,7 @@ class TrajectoryGenerator(Node):
             msg.pose.position.y = float(wp[1])
             msg.pose.position.z = float(wp[2])
 
-            target_roll = math.pi  # Pen points straight down
+            target_roll = 0.0  # Pen points straight down
             target_pitch = 0.0
             target_yaw = 0.0 # Fallback
 
