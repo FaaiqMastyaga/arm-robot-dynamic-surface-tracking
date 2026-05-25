@@ -6,7 +6,6 @@
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2/LinearMath/Matrix3x3.h>
 
-#include "surface_tracking_estimator/velocity_filter_base.hpp"
 #include "surface_tracking_estimator/ema_filter.hpp"
 #include "surface_tracking_estimator/kalman_filter.hpp"
 
@@ -59,15 +58,20 @@ public:
         timer_ = this->create_wall_timer(
             timer_period, std::bind(&VelocityEstimator::timer_callback, this));
 
+        // Setup Parameter Callback
+        param_callback_handle_ = this->add_on_set_parameters_callback(
+            std::bind(&VelocityEstimator::parameters_callback, this, std::placeholders::_1));
+
         RCLCPP_INFO(this->get_logger(), "Velocity Estimator running at %.1f Hz. Tracking %s relative to %s", 
             update_rate, target_frame_.c_str(), base_frame_.c_str());
     }
 
 private:
-    std::unique_ptr<surface_tracking_estimator::VelocityFilterBase> ema_filter_;
-    std::unique_ptr<surface_tracking_estimator::VelocityFilterBase> kalman_filter_;
+    std::unique_ptr<surface_tracking_estimator::EMAFilter> ema_filter_;
+    std::unique_ptr<surface_tracking_estimator::KalmanFilter> kalman_filter_;
     
     rclcpp::Time last_time_;
+    rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_callback_handle_;
 
     std::vector<double> prev_pose_vector_;
     tf2::Quaternion prev_q_;
@@ -83,6 +87,55 @@ private:
 
     std::string base_frame_;
     std::string target_frame_;
+
+    rcl_interfaces::msg::SetParametersResult parameters_callback(const std::vector<rclcpp::Parameter> &parameters)
+    {
+        rcl_interfaces::msg::SetParametersResult result;
+        result.successful = true;
+        result.reason = "success";
+
+        for (const auto &param : parameters) {
+            if (param.get_name() == "ema_alpha") {
+                double alpha = param.as_double();
+                if (ema_filter_) ema_filter_->setAlpha(alpha);
+                RCLCPP_INFO(this->get_logger(), "Updated EMA alpha to: %.2f", alpha);
+            }
+            else if (param.get_name() == "kalman_q_multiplier") {
+                double q_mult = param.as_double();
+                if (kalman_filter_) kalman_filter_->setQMultiplier(q_mult);
+                RCLCPP_INFO(this->get_logger(), "Updated Kalman Q multiplier to: %.4f", q_mult);
+            }
+            else if (param.get_name() == "kalman_r_multiplier") {
+                double r_mult = param.as_double();
+                if (kalman_filter_) kalman_filter_->setRMultiplier(r_mult);
+                RCLCPP_INFO(this->get_logger(), "Updated Kalman R multiplier to: %.4f", r_mult);
+            }
+            else if (param.get_name() == "update_rate") {
+                double update_rate = param.as_double();
+                if (update_rate > 0.0) {
+                    auto timer_period = std::chrono::duration<double>(1.0 / update_rate);
+                    timer_ = this->create_wall_timer(timer_period, std::bind(&VelocityEstimator::timer_callback, this));
+                    RCLCPP_INFO(this->get_logger(), "Updated update_rate to: %.1f Hz", update_rate);
+                } else {
+                    result.successful = false;
+                    result.reason = "update_rate must be strictly greater than 0";
+                }
+            }
+            else if (param.get_name() == "base_frame") {
+                base_frame_ = param.as_string();
+                first_q_init_ = false; // Prevent velocity spike on frame switch
+                last_time_ = rclcpp::Time(0, 0, this->get_clock()->get_clock_type());
+                RCLCPP_INFO(this->get_logger(), "Updated base_frame to: %s", base_frame_.c_str());
+            }
+            else if (param.get_name() == "target_frame") {
+                target_frame_ = param.as_string();
+                first_q_init_ = false; // Prevent velocity spike on frame switch
+                last_time_ = rclcpp::Time(0, 0, this->get_clock()->get_clock_type());
+                RCLCPP_INFO(this->get_logger(), "Updated target_frame to: %s", target_frame_.c_str());
+            }
+        }
+        return result;
+    }
 
     void timer_callback() {
         geometry_msgs::msg::TransformStamped t_target_to_base;

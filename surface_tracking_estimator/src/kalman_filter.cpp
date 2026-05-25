@@ -28,6 +28,22 @@ KalmanFilter::KalmanFilter(double q_multiplier, double r_multiplier)
     I_ = Eigen::MatrixXd::Identity(n_, n_);
 }
 
+void KalmanFilter::setQMultiplier(double q_multiplier)
+{
+    if (q_multiplier < 0.0) {
+        throw std::invalid_argument("Q multiplier must be non-negative");
+    }
+    Q_ = Eigen::MatrixXd::Identity(n_, n_) * q_multiplier;
+}
+
+void KalmanFilter::setRMultiplier(double r_multiplier)
+{
+    if (r_multiplier < 0.0) {
+        throw std::invalid_argument("R multiplier must be non-negative");
+    }
+    R_ = Eigen::MatrixXd::Identity(m_, m_) * r_multiplier;
+}
+
 std::vector<double> KalmanFilter::update(const std::vector<double>& raw_velocity, double dt)
 {
     if (raw_velocity.size() != static_cast<size_t>(m_)) {

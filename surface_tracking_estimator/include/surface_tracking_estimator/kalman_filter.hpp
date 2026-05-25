@@ -1,18 +1,19 @@
 #ifndef SURFACE_TRACKING_ESTIMATOR_KALMAN_FILTER_HPP
 #define SURFACE_TRACKING_ESTIMATOR_KALMAN_FILTER_HPP
 
-#include "surface_tracking_estimator/velocity_filter_base.hpp"
 #include <Eigen/Dense>
 #include <vector>
 
 namespace surface_tracking_estimator {
     
-class KalmanFilter : public VelocityFilterBase 
+class KalmanFilter
 {
 public:
     KalmanFilter(double q_multiplier, double r_multiplier);
-    std::vector<double> update(const std::vector<double>& raw_velocity, double dt) override;
-    void reset() override;
+    void setQMultiplier(double q_multiplier);
+    void setRMultiplier(double r_multiplier);
+    std::vector<double> update(const std::vector<double>& raw_velocity, double dt);
+    void reset();
 
 private:
     bool is_initialized_;

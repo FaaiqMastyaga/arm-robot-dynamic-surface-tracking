@@ -9,8 +9,18 @@ EMAFilter::EMAFilter(double alpha)
     prev_velocity_.assign(6, 0.0);
 }
 
+void EMAFilter::setAlpha(double alpha)
+{
+    if (alpha < 0.0 || alpha > 1.0) {
+        throw std::invalid_argument("Alpha must be in the range [0.0, 1.0]");
+    }
+    alpha_ = alpha;
+}
+
 std::vector<double> EMAFilter::update(const std::vector<double>& raw_velocity, double dt)
 {
+    (void)dt; // Unused parameter, but kept for interface consistency
+    
     if (raw_velocity.size() != 6) {
         throw std::invalid_argument("Raw velocity vector must have exactly 6 elements [x, y, z, roll, pitch, yaw]");
     }

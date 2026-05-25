@@ -1,17 +1,17 @@
 #ifndef SURFACE_TRACKING_ESTIMATOR_EMA_FILTER_HPP
 #define SURFACE_TRACKING_ESTIMATOR_EMA_FILTER_HPP
 
-#include "surface_tracking_estimator/velocity_filter_base.hpp"
 #include <vector>
 
 namespace surface_tracking_estimator {
 
-class EMAFilter : public VelocityFilterBase 
+class EMAFilter
 {
 public:
     explicit EMAFilter(double alpha = 0.2);
-    std::vector<double> update(const std::vector<double>& raw_velocity, double dt) override;
-    void reset() override;
+    void setAlpha(double alpha);
+    std::vector<double> update(const std::vector<double>& raw_velocity, double dt);
+    void reset();
 
 private:
     double alpha_;
