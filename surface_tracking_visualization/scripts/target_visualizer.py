@@ -27,12 +27,12 @@ class TargetVisualizer(Node):
         now = Time()
 
         # ---------------------------------------------------------
-        # 1. PUBLISH THE 4 TRACKING SPHERES
+        # 1. PUBLISH THE TRACKING SPHERES
         # ---------------------------------------------------------
         sphere_array = MarkerArray()
         for i, pt in enumerate(self.target_cad_points):
             sphere = Marker()
-            sphere.header.frame_id = "target_platform_aligned"
+            sphere.header.frame_id = "target_platform_noncoplanar_5pt_aligned"
             sphere.header.stamp = now
             sphere.ns = "target_spheres"
             sphere.id = i
@@ -63,7 +63,7 @@ class TargetVisualizer(Node):
         # 2. PUBLISH THE STL MESH
         # ---------------------------------------------------------
         mesh_marker = Marker()
-        mesh_marker.header.frame_id = "target_platform_aligned"
+        mesh_marker.header.frame_id = "target_platform_noncoplanar_5pt_aligned"
         mesh_marker.header.stamp = now
         mesh_marker.ns = "target_mesh"
         mesh_marker.id = 0
@@ -73,7 +73,7 @@ class TargetVisualizer(Node):
         mesh_marker.action = Marker.ADD
 
         # The path to STL inside the ROS 2 package
-        mesh_marker.mesh_resource = "package://surface_tracking_visualization/meshes/target_platform_frame.stl"
+        mesh_marker.mesh_resource = "package://surface_tracking_visualization/meshes/target_platform_noncoplanar_5pt_frame.stl"
 
         # to meters (multiply by 0.001) for RViz!
         mesh_marker.scale.x = 0.001
