@@ -52,6 +52,31 @@ end_effector:
         0.000000,
     ]
 
+end_effector_comply:
+  ros__parameters:
+    tool_name: end_effector_comply
+    align_camera: pivot
+    cad_points: [
+        0.000000,  0.092000,  0.099100,
+       -0.063985,  0.029837,  0.042000,
+        0.069404,  0.058237,  0.042000,
+       -0.061743, -0.051809,  0.042000,
+        0.063985, -0.029837,  0.042000,
+    ]
+    ordered_cad_points: [
+        0.069404,  0.058237,  0.042000,
+        0.000000,  0.092000,  0.099100,
+       -0.063985,  0.029837,  0.042000,
+        0.063985, -0.029837,  0.042000,
+       -0.061743, -0.051809,  0.042000,
+    ]
+    marker_distances: [
+        0.000000,
+    ]
+    ordered_marker_distances: [
+        0.000000,
+    ]
+
 target_platform:
   ros__parameters:
     tool_name: target_platform
