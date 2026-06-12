@@ -167,7 +167,7 @@ class RosFrontendWorker(QThread):
         # Center of the canvas, 5cm above the board
         hover.pose.position.x = 0.0 # Assuming (0,0) is center
         hover.pose.position.y = 0.0
-        hover.pose.position.z = 0.05 
+        hover.pose.position.z = 0.075 
         
         # Simple straight down orientation
         hover.pose.orientation.x = 0.0
@@ -296,7 +296,7 @@ class DrawableCanvas(QWidget):
             if len(line) > 1:
                 for i in range(1, len(line)): painter.drawLine(line[i - 1], line[i])
 
-    def get_points(self, hover_height_m=0.01):
+    def get_points(self, lift_height_m=0.025):
         trajectory = []
         if not self.lines: return trajectory
         cx = self.active_rect.center().x(); cy = self.active_rect.center().y()
@@ -306,9 +306,9 @@ class DrawableCanvas(QWidget):
             if not line: continue
             line_m = [( (pt.x() - cx) * scale_x, -(pt.y() - cy) * scale_y ) for pt in line]
             start_x, start_y = line_m[0]; end_x, end_y = line_m[-1]
-            trajectory.append((start_x, start_y, hover_height_m)); trajectory.append((start_x, start_y, 0.0))
+            trajectory.append((start_x, start_y, lift_height_m)); trajectory.append((start_x, start_y, 0.0))
             for pt in line_m: trajectory.append((pt[0], pt[1], 0.0))
-            trajectory.append((end_x, end_y, hover_height_m))
+            trajectory.append((end_x, end_y, lift_height_m))
         return trajectory
 
 
@@ -330,6 +330,8 @@ class DashboardClient(QMainWindow):
                 config = yaml.safe_load(file)['global_experiment_manager']['ros__parameters']
                 self.canvas_w = float(config['canvas_width'])
                 self.canvas_h = float(config['canvas_height'])
+                self.z_lift_height = float(config['z_lift_height'])
+                self.z_hover_height = float(config['z_hover_height'])
         except: pass
 
         self.worker = RosFrontendWorker()
@@ -647,7 +649,7 @@ class DashboardClient(QMainWindow):
         self.worker.jog_pub.publish(msg)
 
     def trigger_robot(self):
-        points = self.canvas.get_points()
+        points = self.canvas.get_points(self.z_lift_height)
         if not points:
             self.update_result_log(False, "Canvas is empty!")
             return
