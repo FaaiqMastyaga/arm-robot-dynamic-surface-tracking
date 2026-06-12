@@ -9,6 +9,7 @@ from rclpy.node import Node
 from rclpy.action import ActionServer
 from std_msgs.msg import Bool
 from geometry_msgs.msg import PoseStamped
+from nav_msgs.msg import Path
 
 from surface_tracking_interfaces.action import DrawTrajectory
 from tf2_ros import Buffer, TransformListener
@@ -48,17 +49,20 @@ class TrajectoryGenerator(Node):
         self.declare_parameter('drawing_feedrate', 0.1)
         self.declare_parameter('plunge_feedrate', 0.02)
         self.declare_parameter('z_hover_height', 0.01)
+        self.declare_parameter('lookahead_window', 10)
 
         # --- Get Parameters ---
         self.control_rate = self.get_parameter('control_loop_rate').get_parameter_value().double_value
         self.drawing_feedrate = self.get_parameter('drawing_feedrate').get_parameter_value().double_value
         self.plunge_feedrate = self.get_parameter('plunge_feedrate').get_parameter_value().double_value
         self.z_hover_height = self.get_parameter('z_hover_height').get_parameter_value().double_value
+        self.lookahead_window = self.get_parameter('lookahead_window').get_parameter_value().integer_value
 
         self.dt = 1.0 / self.control_rate     # Time step for control loop
         self.tracking_active = True
         
         self.pose_pub = self.create_publisher(PoseStamped, '/desired_drawing_pose', 10)
+        self.path_pub = self.create_publisher(Path, '/desired_drawing_path', 10)
 
         self.create_subscription(Bool, '/tracking_active_flag', lambda msg: setattr(self, 'tracking_active', msg.data), 10)
 
@@ -140,22 +144,26 @@ class TrajectoryGenerator(Node):
         feedback_msg.current_state = "Streaming to Robot..."
         goal_handle.publish_feedback(feedback_msg)
         
-        # Stream the points exactly at the control rate
-        for idx, wp in enumerate(smoothed_waypoints):
+        # Stream the window path exactly at the control rate
+        for idx in range(total_waypoints):
             # INSTANT ABORT CHECK: If user hit Stop or changed tabs
             if not self.tracking_active or goal_handle.is_cancel_requested:
                 goal_handle.canceled()
                 self.get_logger().warn('Trajectory aborted by operator!')
                 return DrawTrajectory.Result(success=False, message="Aborted by operator.")
 
-            # Construct the pose
-            msg = PoseStamped()
-            msg.header.stamp = self.get_clock().now().to_msg()
-            msg.header.frame_id = "whiteboard"
-            
-            msg.pose.position.x = float(wp[0])
-            msg.pose.position.y = float(wp[1])
-            msg.pose.position.z = float(wp[2])
+            # Slice the lookahead window
+            end_idx = min(idx + self.lookahead_window, total_waypoints)
+            window_points = smoothed_waypoints[idx:end_idx]
+
+            # Pad the end of the array if we are near the end to maintain a consistent window size
+            while len(window_points) < self.lookahead_window:
+                window_points.append(smoothed_waypoints[-1])
+
+            # Prepare the Path message
+            path_msg = Path()
+            path_msg.header.stamp = self.get_clock().now().to_msg()
+            path_msg.header.frame_id = "whiteboard"
 
             target_roll = 0.0  # Pen points straight down
             target_pitch = 0.0
@@ -169,16 +177,32 @@ class TrajectoryGenerator(Node):
                 pass
 
             q = quaternion_from_euler(target_roll, target_pitch, target_yaw)
-            msg.pose.orientation.x = float(q[0])
-            msg.pose.orientation.y = float(q[1])
-            msg.pose.orientation.z = float(q[2])
-            msg.pose.orientation.w = float(q[3])
+            
+            # Build the PoseStamped array
+            for wp in window_points:
+                pose = PoseStamped()
+                pose.header.stamp = self.get_clock().now().to_msg()
+                pose.header.frame_id = "whiteboard"
 
-            # Publish to the C++ tracking loop
-            self.pose_pub.publish(msg)
+                pose.pose.position.x = float(wp[0])
+                pose.pose.position.y = float(wp[1])
+                pose.pose.position.z = float(wp[2])
 
-            # Send live progress bar updates to the GUI
-            if idx % 10 == 0: # Throttle feedback to avoid network spam
+                pose.pose.orientation.x = float(q[0])
+                pose.pose.orientation.y = float(q[1])
+                pose.pose.orientation.z = float(q[2])
+                pose.pose.orientation.w = float(q[3])
+
+                path_msg.poses.append(pose)
+
+            # Publish the full trajectory segment (for MPC)
+            self.path_pub.publish(path_msg)
+
+            # Publish the single current point (for PID)
+            single_pose_msg = path_msg.poses[0]
+            self.pose_pub.publish(single_pose_msg)
+
+            if idx % 10 == 0:
                 feedback_msg.progress_percentage = (idx / total_waypoints) * 100.0
                 goal_handle.publish_feedback(feedback_msg)
 
