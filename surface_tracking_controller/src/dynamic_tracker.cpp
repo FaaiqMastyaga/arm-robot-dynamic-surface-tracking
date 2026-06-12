@@ -7,10 +7,8 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
 #include "surface_tracking_controller/siso_controller_base.hpp"
-#include "surface_tracking_controller/mimo_controller_base.hpp"
 #include "surface_tracking_controller/pid_controller.hpp"
 #include "surface_tracking_controller/pid_ff_controller.hpp"
-// #include "surface_tracking_controller/mpc_controller.hpp"
 
 #include <chrono>
 #include <vector>
@@ -103,7 +101,6 @@ private:
 
     // Vector of 6 controllers for cartesian space
     std::vector<std::unique_ptr<surface_tracking_controller::SISOControllerBase>> siso_controllers_;
-    std::unique_ptr<surface_tracking_controller::MIMOControllerBase> mimo_controller_;
 
     std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
     std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
@@ -129,9 +126,6 @@ private:
             for (int i = 0; i < 6; ++i) {
                 siso_controllers_.push_back(std::make_unique<PidFeedforwardController>(kp_, ki_, kd_, k_ff_, max_integral_));
             }
-        }
-        else if (controller_type_ == "mpc") {
-            // mimo_controller_ = std::make_unique<MpcController>();
         }
     }
 
@@ -260,22 +254,13 @@ private:
             double wy = siso_controllers_[4]->update_with_ff(0.0, err_ry, ff_wy, dt);
             double wz = siso_controllers_[5]->update_with_ff(0.0, err_rz, ff_wz, dt);
             
-            // Clamp the output to max command velocity limits
-            double v_norm = std::sqrt(vx*vx + vy*vy + vz*vz);
-            if (v_norm > max_linear_vel_) {
-                double scale = max_linear_vel_ / v_norm;
-                vx *= scale;
-                vy *= scale;
-                vz *= scale;
-            }
-            
-            double w_norm = std::sqrt(wx*wx + wy*wy + wz*wz);
-            if (w_norm > max_angular_vel_) {
-                double scale = max_angular_vel_ / w_norm;
-                wx *= scale;
-                wy *= scale;
-                wz *= scale;
-            }
+            vx = std::clamp(vx, -max_linear_vel_, max_linear_vel_);
+            vy = std::clamp(vy, -max_linear_vel_, max_linear_vel_);
+            vz = std::clamp(vz, -max_linear_vel_, max_linear_vel_);
+
+            wx = std::clamp(wx, -max_angular_vel_, max_angular_vel_);
+            wy = std::clamp(wy, -max_angular_vel_, max_angular_vel_);
+            wz = std::clamp(wz, -max_angular_vel_, max_angular_vel_);
 
             // Publish the command twist
             geometry_msgs::msg::TwistStamped cmd_twist;
