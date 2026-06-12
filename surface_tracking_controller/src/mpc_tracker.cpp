@@ -364,7 +364,26 @@ private:
                 target_transform = tf_buffer_->lookupTransform(
                     base_frame, latest_target_path_.header.frame_id, tf2::TimePointZero);
             } catch (const tf2::TransformException& ex) {
-                return; // Abort this control tick if TF fails
+                RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000, 
+                    "Tracking occluded! Waiting for Aimooe TF: %s", ex.what());
+
+                // --- SAFETY FALLBACK: COMMAND ZERO VELOCITY ---
+                geometry_msgs::msg::TwistStamped stop_twist;
+                stop_twist.header.stamp = current_time;
+                stop_twist.header.frame_id = base_frame;
+                
+                // Explicitly set all values to 0.0
+                stop_twist.twist.linear.x = 0.0;
+                stop_twist.twist.linear.y = 0.0;
+                stop_twist.twist.linear.z = 0.0;
+                stop_twist.twist.angular.x = 0.0;
+                stop_twist.twist.angular.y = 0.0;
+                stop_twist.twist.angular.z = 0.0;
+                
+                servo_twist_pub_->publish(stop_twist);
+                command_twist_pub_->publish(stop_twist);
+                
+                return;
             }
 
             for (int i = 0; i < path_len; ++i) {
