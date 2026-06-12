@@ -1,13 +1,12 @@
 /**:
   ros__parameters:
-    controller_type: "pid_ff"   # Options: pid, pid_ff, mpc
     control_loop_rate: 100.0
-    max_linear_vel: 0.4
-    max_angular_vel: 0.8
-
+    max_linear_vel: 2.5
+    max_angular_vel: 3.14
+    z_plunge_depth: 0.0075
 
     # PID & PID Feedforward Tuning
-    kp: 4.0
+    kp: 5.0
     ki: 0.0
     kd: 0.0
     k_ff: 1.0
@@ -15,4 +14,11 @@
 
     # MPC Tuning
     mpc_horizon: 10
-    mpc_dt: 0.1
+
+    # Q Penalty (State Tracking)
+    # [x, y, z, roll, pitch, yaw, vx, vy, vz, wx, wy, wz]
+    mpc_q_diagonal: [2000.0, 2000.0, 2000.0, 2000.0, 2000.0, 2000.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0]
+    
+    # R Penalty (Control Effort)
+    # [vx, vy, vz, wx, wy, wz]
+    mpc_r_diagonal: [0.1, 0.1, 0.1, 1.0, 1.0, 1.0]
