@@ -1,9 +1,9 @@
 global_experiment_manager:
   ros__parameters:
-    use_sim: true
+    use_sim: false
 
     # --- Active Hardware Definitions ---
-    active_camera_aligner: robot_base
+    active_camera_aligner: end_effector_comply
     active_target_platform: target_platform
     marker_configuration: noncoplanar   # Options: coplanar, noncoplanar
     tool_placement: perpendicular  # Options: parallel, perpendicular (relative to whiteboard platform) 
@@ -19,10 +19,12 @@ global_experiment_manager:
     
     # --- Trajectory Parameters ---
     drawing_feedrate: 0.05       # Meters per second
-    plunge_feedrate: 0.02        # Slower speed for lifting/plunging the pen
-    z_hover_height: 0.01         # 1 cm above the board when not drawing
+    plunge_feedrate: 0.05        # Slower speed for lifting/plunging the pen
+    z_plunge_depth: 0.0025
+    z_lift_height: 0.025
+    z_hover_height: 0.050
 
     # --- Control Loop Parameters ---
     control_loop_rate: 100.0    # 100 Hz control loop
-    controller_type: pid_ff     # Options: pid, pid_ff, mpc
+    controller_type: mpc     # Options: pid, pid_ff, mpc
     filter_type: kalman_filter  # Options: raw, ema_filter, kalman_filter
