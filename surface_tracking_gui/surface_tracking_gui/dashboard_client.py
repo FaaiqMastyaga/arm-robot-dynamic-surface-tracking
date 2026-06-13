@@ -310,6 +310,49 @@ class DrawableCanvas(QWidget):
             for pt in line_m: trajectory.append((pt[0], pt[1], 0.0))
             trajectory.append((end_x, end_y, lift_height_m))
         return trajectory
+    
+    def draw_auto_shape(self, shape_type):
+        self.lines.clear()
+        
+        # Get the center of the active drawing rectangle
+        cx = self.active_rect.center().x()
+        cy = self.active_rect.center().y()
+        
+        # Scale the shape to take up 80% of the available canvas
+        radius = min(self.active_rect.width(), self.active_rect.height()) * 0.3 
+        
+        points = []
+        if shape_type == 'square':
+            # 4 perfect right angles
+            points = [
+                QPointF(cx - radius, cy - radius),
+                QPointF(cx + radius, cy - radius),
+                QPointF(cx + radius, cy + radius),
+                QPointF(cx - radius, cy + radius),
+                QPointF(cx - radius, cy - radius) # Close the loop
+            ]
+        elif shape_type == 'triangle':
+            # Equilateral triangle pointing up
+            height_offset = radius * 0.866 # sin(60 deg)
+            points = [
+                QPointF(cx, cy - radius),
+                QPointF(cx + radius, cy + height_offset),
+                QPointF(cx - radius, cy + height_offset),
+                QPointF(cx, cy - radius) # Close the loop
+            ]
+        elif shape_type == 'circle':
+            # 60 points of interpolation for a smooth circle
+            num_points = 60
+            for i in range(num_points + 1):
+                angle = (i / num_points) * 2 * math.pi
+                x = cx + radius * math.cos(angle)
+                y = cy + radius * math.sin(angle)
+                points.append(QPointF(x, y))
+                
+        if points:
+            self.lines.append(points)
+            
+        self.update()
 
 
 # ---------------------------------------------------------
@@ -414,6 +457,25 @@ class DashboardClient(QMainWindow):
         self.bar_action_progress = QProgressBar(); self.bar_action_progress.setRange(0, 100); self.bar_action_progress.setFixedHeight(25) 
         status_layout.addWidget(self.lbl_action_status); status_layout.addWidget(self.bar_action_progress)
         layout.addLayout(status_layout)
+
+        shape_layout = QHBoxLayout()
+
+        btn_square = QPushButton("DRAW SQUARE")
+        btn_square.setFixedHeight(35)
+        btn_square.clicked.connect(lambda: [self.worker.call_service('clear_rviz'), self.canvas.draw_auto_shape('square')])
+        
+        btn_triangle = QPushButton("DRAW TRIANGLE")
+        btn_triangle.setFixedHeight(35)
+        btn_triangle.clicked.connect(lambda: [self.worker.call_service('clear_rviz'), self.canvas.draw_auto_shape('triangle')])
+        
+        btn_circle = QPushButton("DRAW CIRCLE")
+        btn_circle.setFixedHeight(35)
+        btn_circle.clicked.connect(lambda: [self.worker.call_service('clear_rviz'), self.canvas.draw_auto_shape('circle')])
+
+        shape_layout.addWidget(btn_square)
+        shape_layout.addWidget(btn_triangle)
+        shape_layout.addWidget(btn_circle)
+        layout.addLayout(shape_layout)
 
         btn_layout = QHBoxLayout()
         self.btn_clear = QPushButton("CLEAR CANVAS")
