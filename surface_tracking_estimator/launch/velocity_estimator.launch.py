@@ -38,8 +38,23 @@ def generate_launch_description():
         ]
     )
 
+    eskf_estimator_node = Node(
+        package='surface_tracking_estimator',
+        executable='velocity_estimator_eskf',
+        name='velocity_estimator_eskf',
+        output='screen',
+        parameters=[
+            config_file,
+            {
+                'target_frame': LaunchConfiguration('target_frame'),
+                'base_frame': LaunchConfiguration('base_frame')
+            }
+        ]
+    )
+
     return LaunchDescription([
         target_frame_arg,
         base_frame_arg,
-        estimator_node
+        estimator_node,
+        eskf_estimator_node
     ])

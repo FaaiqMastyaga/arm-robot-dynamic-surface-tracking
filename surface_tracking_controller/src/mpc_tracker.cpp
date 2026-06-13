@@ -74,8 +74,15 @@ public:
                 has_target_path_ = true;
             }
         );
+        target_pose_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(
+            "/estimated_target_pose/eskf", 10, 
+            [this](const geometry_msgs::msg::PoseStamped& msg) {
+                latest_eskf_pose_ = msg;
+                has_eskf_pose_ = true;
+            }
+        );
         target_twist_sub_ = this->create_subscription<geometry_msgs::msg::TwistStamped>(
-            "/target_twist", 10, 
+            "/estimated_target_twist/eskf", 10, 
             [this](const geometry_msgs::msg::TwistStamped& msg) {
                 latest_target_twist_ = msg;
                 has_target_twist_ = true;
@@ -103,10 +110,12 @@ private:
     // --- State Caches ---
     nav_msgs::msg::Path latest_target_path_;
     geometry_msgs::msg::PoseStamped latest_target_pose_;
+    geometry_msgs::msg::PoseStamped latest_eskf_pose_;
     geometry_msgs::msg::TwistStamped latest_target_twist_;
     geometry_msgs::msg::Twist cartesian_twist_;
     bool has_target_path_ = false;
     bool has_target_pose_ = false;
+    bool has_eskf_pose_ = false;
     bool has_target_twist_ = false;
 
     // MPC Variables
@@ -137,8 +146,9 @@ private:
 
     rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr servo_twist_pub_;
 
-    rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr planner_pose_sub_;
     rclcpp::Subscription<nav_msgs::msg::Path>::SharedPtr planner_path_sub_;
+    rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr planner_pose_sub_;
+    rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr target_pose_sub_;
     rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr target_twist_sub_;
     rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_state_sub_;
     rclcpp::TimerBase::SharedPtr control_timer_;
@@ -346,6 +356,32 @@ private:
             // GET TARGET STATE & GENERATE HORIZON (x_ref)
             // ==========================================
             Eigen::MatrixXd R_ref = Eigen::MatrixXd::Zero(12, prediction_horizon_);
+
+            if (!has_eskf_pose_ || !has_target_twist_) {
+                RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000, 
+                    "Waiting for ESKF data...");
+
+                geometry_msgs::msg::TwistStamped stop_twist;
+                stop_twist.header.stamp = current_time;
+                stop_twist.header.frame_id = base_frame;
+                servo_twist_pub_->publish(stop_twist);
+                command_twist_pub_->publish(stop_twist);
+                return;
+            }
+
+            // If the ESKF data is older than 0.1 seconds, tracking is lost.
+            double data_age = (current_time - rclcpp::Time(latest_eskf_pose_.header.stamp)).seconds();
+            if (data_age > 0.1) {
+                RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000, 
+                    "ESKF data is stale (age: %.3f s). Target occluded or node died. Halting.", data_age);
+                
+                geometry_msgs::msg::TwistStamped stop_twist;
+                stop_twist.header.stamp = current_time;
+                stop_twist.header.frame_id = base_frame;
+                servo_twist_pub_->publish(stop_twist);
+                command_twist_pub_->publish(stop_twist);
+                return;
+            }
             
             // Extract the moving whiteboard's velocity (from the Kalman Filter)
             double wb_vx = has_target_twist_ ? latest_target_twist_.twist.linear.x : 0.0;
@@ -354,37 +390,20 @@ private:
             double wb_wx = has_target_twist_ ? latest_target_twist_.twist.angular.x : 0.0;
             double wb_wy = has_target_twist_ ? latest_target_twist_.twist.angular.y : 0.0;
             double wb_wz = has_target_twist_ ? latest_target_twist_.twist.angular.z : 0.0;
-
+            
             // Determine how many points we can safely pull from the path message
             int path_len = std::min(prediction_horizon_, (int)latest_target_path_.poses.size());
-
-            // Look up the transform exactly ONCE before the loop
+            
+            // Manually build the transform from the ESKF pose
             geometry_msgs::msg::TransformStamped target_transform;
-            try {
-                target_transform = tf_buffer_->lookupTransform(
-                    base_frame, latest_target_path_.header.frame_id, tf2::TimePointZero);
-            } catch (const tf2::TransformException& ex) {
-                RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000, 
-                    "Tracking occluded! Waiting for Aimooe TF: %s", ex.what());
+            target_transform.header.stamp = current_time;
+            target_transform.header.frame_id = base_frame;
+            target_transform.child_frame_id = latest_target_path_.header.frame_id;
 
-                // --- SAFETY FALLBACK: COMMAND ZERO VELOCITY ---
-                geometry_msgs::msg::TwistStamped stop_twist;
-                stop_twist.header.stamp = current_time;
-                stop_twist.header.frame_id = base_frame;
-                
-                // Explicitly set all values to 0.0
-                stop_twist.twist.linear.x = 0.0;
-                stop_twist.twist.linear.y = 0.0;
-                stop_twist.twist.linear.z = 0.0;
-                stop_twist.twist.angular.x = 0.0;
-                stop_twist.twist.angular.y = 0.0;
-                stop_twist.twist.angular.z = 0.0;
-                
-                servo_twist_pub_->publish(stop_twist);
-                command_twist_pub_->publish(stop_twist);
-                
-                return;
-            }
+            target_transform.transform.translation.x = latest_eskf_pose_.pose.position.x;
+            target_transform.transform.translation.y = latest_eskf_pose_.pose.position.y;
+            target_transform.transform.translation.z = latest_eskf_pose_.pose.position.z;
+            target_transform.transform.rotation = latest_eskf_pose_.pose.orientation;
 
             for (int i = 0; i < path_len; ++i) {
                 double future_time = i * dt;
@@ -557,12 +576,13 @@ private:
 
         } catch (const tf2::TransformException& ex) {
             RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000, 
-                "Tracking occluded! Waiting for Aimooe TF: %s", ex.what());
+                "Robot Kinematics TF missing! Cannot find end-effector: %s", ex.what());
 
             geometry_msgs::msg::TwistStamped stop_twist;
             stop_twist.header.stamp = current_time;
             stop_twist.header.frame_id = base_frame;
             servo_twist_pub_->publish(stop_twist);
+            command_twist_pub_->publish(stop_twist);
         }
     }
 };

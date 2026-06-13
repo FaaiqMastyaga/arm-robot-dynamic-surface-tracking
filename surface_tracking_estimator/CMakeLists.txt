@@ -30,9 +30,18 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 
 # --- Build the ROS 2 Node Executable ---
 add_executable(velocity_estimator src/velocity_estimator.cpp)
+add_executable(velocity_estimator_eskf src/velocity_estimator_eskf.cpp)
 
 # Link the node to ROS 2 dependencies
 ament_target_dependencies(velocity_estimator
+  rclcpp
+  geometry_msgs
+  tf2
+  tf2_ros
+  tf2_geometry_msgs
+)
+
+ament_target_dependencies(velocity_estimator_eskf
   rclcpp
   geometry_msgs
   tf2
@@ -46,8 +55,13 @@ target_link_libraries(velocity_estimator
   Eigen3::Eigen
 )
 
+target_link_libraries(velocity_estimator_eskf 
+  ${PROJECT_NAME}
+  Eigen3::Eigen
+)
+
 # --- Install the Executable ---
-install(TARGETS ${PROJECT_NAME} velocity_estimator
+install(TARGETS ${PROJECT_NAME} velocity_estimator velocity_estimator_eskf
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}

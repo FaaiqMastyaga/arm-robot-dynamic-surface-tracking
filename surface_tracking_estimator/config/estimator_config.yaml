@@ -10,3 +10,11 @@ velocity_estimator:
     # Kalman Tuning (Constant Acceleration Model)
     kalman_q_multiplier: 0.03  # Process Noise: Increase to trust sensor more (reduce lag, increase jitter)
     kalman_r_multiplier: 0.2   # Measurement Noise: Increase to trust model more (increase smoothness, slight lag)
+
+    # Error-State Kalman Filter Tuning (Constant Velocity Model)
+    r_trans_noise: 0.02
+    r_rot_noise: 0.02
+    q_trans_pos: 0.001
+    q_trans_vel: 2.0  
+    q_rot_pos: 0.001
+    q_rot_vel: 2.0
