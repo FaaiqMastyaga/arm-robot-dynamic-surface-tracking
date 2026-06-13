@@ -1,4 +1,5 @@
 #include <rclcpp/rclcpp.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/twist_stamped.hpp>
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <tf2_ros/transform_listener.h>
@@ -48,6 +49,7 @@ public:
         tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
         // Initialize Publishers
+        raw_pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>("/estimated_target_pose/raw", 10);
         raw_twist_pub_ = this->create_publisher<geometry_msgs::msg::TwistStamped>("/estimated_target_twist/raw", 10);
         ema_twist_pub_ = this->create_publisher<geometry_msgs::msg::TwistStamped>("/estimated_target_twist/ema_filter", 10);
         kalman_twist_pub_ = this->create_publisher<geometry_msgs::msg::TwistStamped>("/estimated_target_twist/kalman_filter", 10);
@@ -77,6 +79,7 @@ private:
     tf2::Quaternion prev_q_;
     bool first_q_init_ = false;
 
+    rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr raw_pose_pub_;
     rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr raw_twist_pub_;
     rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr ema_twist_pub_;
     rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr kalman_twist_pub_;
@@ -193,6 +196,20 @@ private:
             raw_velocity[4] = (angle / dt) * axis.y();
             raw_velocity[5] = (angle / dt) * axis.z();
 
+            // --- PUBLISH POSE ---
+            geometry_msgs::msg::PoseStamped raw_pose_msg;
+            raw_pose_msg.header.stamp = current_time;
+            raw_pose_msg.header.frame_id = base_frame_;
+            raw_pose_msg.pose.position.x = t_target_to_base.transform.translation.x;
+            raw_pose_msg.pose.position.y = t_target_to_base.transform.translation.y;
+            raw_pose_msg.pose.position.z = t_target_to_base.transform.translation.z;
+            raw_pose_msg.pose.orientation.x = t_target_to_base.transform.rotation.x;
+            raw_pose_msg.pose.orientation.y = t_target_to_base.transform.rotation.y;
+            raw_pose_msg.pose.orientation.z = t_target_to_base.transform.rotation.z;
+            raw_pose_msg.pose.orientation.z = t_target_to_base.transform.rotation.w;
+            raw_pose_pub_->publish(raw_pose_msg);
+
+            // --- PUBLISH TWIST ---
             // --- PUBLISH RAW ---
             geometry_msgs::msg::TwistStamped raw_twist_msg; 
             raw_twist_msg.header.stamp = current_time;
