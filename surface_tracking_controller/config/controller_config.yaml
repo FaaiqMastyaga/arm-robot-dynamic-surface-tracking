@@ -21,4 +21,4 @@
     
     # R Penalty (Control Effort)
     # [vx, vy, vz, wx, wy, wz]
-    mpc_r_diagonal: [0.1, 0.1, 0.1, 1.0, 1.0, 1.0]
+    mpc_r_diagonal: [0.2, 0.2, 0.2, 0.2, 0.2, 0.2]
