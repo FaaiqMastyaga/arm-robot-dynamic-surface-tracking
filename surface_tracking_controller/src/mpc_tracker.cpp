@@ -25,7 +25,7 @@ public:
         this->declare_parameter<double>("control_loop_rate", 100.0);
         this->declare_parameter<double>("max_linear_vel", 0.4);
         this->declare_parameter<double>("max_angular_vel", 0.8);
-        this->declare_parameter<double>("z_plunge_depth", 0.0075);
+        this->declare_parameter<double>("z_plunge_depth", 0.0025);
         this->declare_parameter<int>("mpc_horizon", 10);
         // Declare MPC Weight Vectors with safe defaults
         this->declare_parameter<std::vector<double>>("mpc_q_diagonal", 
@@ -203,6 +203,8 @@ private:
                 max_linear_vel_ = param.as_double();
             } else if (param.get_name() == "max_angular_vel") {
                 max_angular_vel_ = param.as_double();
+            } else if (param.get_name() == "z_plunge_depth") {
+                z_plunge_depth_ = param.as_double();
             } else if (param.get_name() == "mpc_horizon") {
                 prediction_horizon_ = param.as_int();
             } else if (param.get_name() == "mpc_q_diagonal") {

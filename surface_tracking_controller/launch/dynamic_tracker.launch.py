@@ -1,4 +1,5 @@
 import os
+import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
@@ -16,11 +17,23 @@ def load_file(package_name, file_path):
         return None
 
 def generate_launch_description():
+    global_config_file = os.path.join(
+        get_package_share_directory('surface_tracking_bringup'),
+        'config',
+        'experiment_config.yaml'
+    )
+
     config_file = os.path.join(
         get_package_share_directory('surface_tracking_controller'),
         'config',
         'controller_config.yaml'
     )
+
+    # --- Fetch Parameters ---
+    with open(global_config_file, 'r') as file:
+        global_config = yaml.safe_load(file)['global_experiment_manager']['ros__parameters']
+    
+    z_plunge_depth = global_config['z_plunge_depth']
 
     # --- Launch Arguments ---
     filter_type_arg = DeclareLaunchArgument(
@@ -59,7 +72,7 @@ def generate_launch_description():
     is_not_mpc = PythonExpression(["'", LaunchConfiguration('controller_type'), "' != 'mpc'"])
 
     # --- Node Definitions ---
-    # 1. The Legacy PID/PID_FF Node
+    # 1. The PID/PID_FF Node
     pid_node = Node(
         package='surface_tracking_controller',
         executable='dynamic_tracker',
@@ -75,7 +88,7 @@ def generate_launch_description():
         ]
     )
 
-    # 2. The New LTV-MPC Node
+    # 2. The LTV-MPC Node
     mpc_node = Node(
         package='surface_tracking_controller',
         executable='mpc_tracker',
@@ -87,6 +100,7 @@ def generate_launch_description():
         ],
         parameters=[
             config_file,
+            {'z_plunge_depth': float(z_plunge_depth)},
             robot_description,          # Inject URDF directly
             robot_description_semantic  # Inject SRDF directly
         ]
