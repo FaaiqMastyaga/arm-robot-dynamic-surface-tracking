@@ -6,6 +6,23 @@ namespace surface_tracking_controller {
 MpcOsqpSolver::MpcOsqpSolver(int horizon, int state_dim, int input_dim)
     : N_(horizon), nx_(state_dim), nu_(input_dim), solver_initialized_(false) {}
 
+void MpcOsqpSolver::updateHorizon(int new_horizon, const Eigen::MatrixXd& Q, const Eigen::MatrixXd& R) {
+    if (N_ == new_horizon) return; // Ignore if it's the same
+
+    N_ = new_horizon;
+    
+    // Rebuild Q_bar and R_bar to match the new size
+    setWeights(Q, R); 
+
+    // CRITICAL: Wipe both the OSQP C-workspace AND the C++ data wrapper caches
+    solver_.clearSolver(); 
+    solver_.data()->clearHessianMatrix();
+    solver_.data()->clearLinearConstraintsMatrix();
+    
+    // Force the solve() loop to trigger the initSolver() branch on the next tick
+    solver_initialized_ = false; 
+}
+
 void MpcOsqpSolver::setWeights(const Eigen::MatrixXd& Q, const Eigen::MatrixXd& R) {
     // Construct Block Diagonal Q_bar and R_bar for the entire prediction horizon
     Q_bar_ = Eigen::MatrixXd::Zero(N_ * nx_, N_ * nx_);
@@ -61,6 +78,8 @@ bool MpcOsqpSolver::solve(const Eigen::MatrixXd& A_k, const Eigen::MatrixXd& B,
 
     // 1. Compute OSQP Hesian (P) and Gradient (q) for the QP problem
     Eigen::MatrixXd H = 2.0 * (G.transpose() * Q_bar_ * G + R_bar_);
+    H = 0.5 * (H + H.transpose());
+
     Eigen::VectorXd f = 2.0 * G.transpose() * Q_bar_ * (F * x_0 - r_flat);
 
     // 2. Compute constraints
@@ -73,10 +92,20 @@ bool MpcOsqpSolver::solve(const Eigen::MatrixXd& A_k, const Eigen::MatrixXd& B,
     // Convert Dense H to sparse format for OSQP
     Eigen::SparseMatrix<double> H_sparse = H.sparseView();
     
+    // Force Eigen to remove unused memory gaps before OSQP reads it
+    H_sparse.makeCompressed();
+    A_cons.makeCompressed();
+
     // 3. Initialize or Update OSQP Solver
     if (!solver_initialized_) {
         solver_.settings()->setVerbosity(false);
         solver_.settings()->setWarmStart(true);
+
+        // --- ADAPTIVE SCALING AND RELAXATION ---
+        solver_.settings()->setAdaptiveRho(true);
+        solver_.settings()->setAdaptiveRhoInterval(25);
+        solver_.settings()->setScaling(10); 
+        solver_.settings()->setMaxIteration(4000);
 
         solver_.data()->setNumberOfVariables(N_ * nu_);
         solver_.data()->setNumberOfConstraints(N_ * nu_);
@@ -94,9 +123,20 @@ bool MpcOsqpSolver::solve(const Eigen::MatrixXd& A_k, const Eigen::MatrixXd& B,
         solver_initialized_ = true;
     } else {
         // LTV-MPC changes H and f every step, so we must update them
-        solver_.updateHessianMatrix(H_sparse);
-        solver_.updateGradient(f);
-        solver_.updateBounds(lower_bound, upper_bound);
+        // Safely remove and reset the value
+        solver_.clearSolver();
+
+        solver_.data()->clearHessianMatrix();
+        solver_.data()->clearLinearConstraintsMatrix();
+        
+        solver_.data()->setHessianMatrix(H_sparse);
+        solver_.data()->setGradient(f);
+        solver_.data()->setLinearConstraintsMatrix(A_cons);
+        solver_.data()->setLowerBound(lower_bound);
+        solver_.data()->setUpperBound(upper_bound);
+        
+        // Re-initialize the workspace with the new matrices
+        solver_.initSolver();
     }
 
     // 4. Solve the QP problem

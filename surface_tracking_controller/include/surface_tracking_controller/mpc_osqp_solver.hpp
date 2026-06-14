@@ -11,7 +11,7 @@ public:
     MpcOsqpSolver(int horizon, int state_dim, int input_dim);
     ~MpcOsqpSolver() = default;
 
-    // Call this once during initialization
+    void updateHorizon(int new_horizon, const Eigen::MatrixXd& Q, const Eigen::MatrixXd& R);
     void setWeights(const Eigen::MatrixXd& Q, const Eigen::MatrixXd& R);
 
     // Call this at each control step to solve for the optimal control input

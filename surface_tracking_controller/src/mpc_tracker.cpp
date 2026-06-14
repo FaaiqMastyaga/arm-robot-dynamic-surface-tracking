@@ -29,9 +29,9 @@ public:
         this->declare_parameter<int>("mpc_horizon", 10);
         // Declare MPC Weight Vectors with safe defaults
         this->declare_parameter<std::vector<double>>("mpc_q_diagonal", 
-            {500.0, 500.0, 500.0, 1000.0, 1000.0, 800.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0});
+            {20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1});
         this->declare_parameter<std::vector<double>>("mpc_r_diagonal", 
-            {10.0, 10.0, 50.0, 500.0, 500.0, 500.0});
+            {0.002, 0.002, 0.002, 0.002, 0.002, 0.002});
 
         // Fetch Parameter into class members
         control_loop_rate_ = this->get_parameter("control_loop_rate").as_double();
@@ -196,6 +196,7 @@ private:
         result.successful = true;
         result.reason = "success";
 
+        bool update_horizon = false;
         bool update_weights = false;
 
         for (const auto &param : parameters) {
@@ -206,7 +207,11 @@ private:
             } else if (param.get_name() == "z_plunge_depth") {
                 z_plunge_depth_ = param.as_double();
             } else if (param.get_name() == "mpc_horizon") {
-                prediction_horizon_ = param.as_int();
+                int new_h = param.as_int();
+                if (new_h > 0 && new_h != prediction_horizon_) {
+                    prediction_horizon_ = new_h;
+                    update_horizon = true;
+                }
             } else if (param.get_name() == "mpc_q_diagonal") {
                 std::vector<double> q_vec = param.as_double_array();
                 if (q_vec.size() == 12) {
@@ -222,10 +227,18 @@ private:
             }
         }
 
-        // Push new weights to the solver instantly
-        if (update_weights && mpc_solver_) {
-            mpc_solver_->setWeights(Q_, R_);
-            RCLCPP_INFO(this->get_logger(), "MPC Weights Updated Live!");
+        // Apply changes to the solver
+        if (mpc_solver_) {
+            // Horizon change takes priority because it wipes the workspace and rebuilds weights anyway
+            if (update_horizon) {
+                mpc_solver_->updateHorizon(prediction_horizon_, Q_, R_);
+                RCLCPP_INFO(this->get_logger(), "MPC Horizon Updated Live to: %d", prediction_horizon_);
+            } 
+            // If only weights changed, update them without destroying the workspace
+            else if (update_weights) {
+                mpc_solver_->setWeights(Q_, R_);
+                RCLCPP_INFO(this->get_logger(), "MPC Weights Updated Live!");
+            }
         }
 
         return result;
