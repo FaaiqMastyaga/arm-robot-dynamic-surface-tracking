@@ -206,7 +206,7 @@ private:
             raw_pose_msg.pose.orientation.x = t_target_to_base.transform.rotation.x;
             raw_pose_msg.pose.orientation.y = t_target_to_base.transform.rotation.y;
             raw_pose_msg.pose.orientation.z = t_target_to_base.transform.rotation.z;
-            raw_pose_msg.pose.orientation.z = t_target_to_base.transform.rotation.w;
+            raw_pose_msg.pose.orientation.w = t_target_to_base.transform.rotation.w;
             raw_pose_pub_->publish(raw_pose_msg);
 
             // --- PUBLISH TWIST ---
