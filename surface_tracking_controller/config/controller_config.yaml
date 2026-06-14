@@ -13,12 +13,12 @@
     max_integral: 1.0
 
     # MPC Tuning
-    mpc_horizon: 10
+    mpc_horizon: 15
 
     # Q Penalty (State Tracking)
     # [x, y, z, roll, pitch, yaw, vx, vy, vz, wx, wy, wz]
-    mpc_q_diagonal: [2000.0, 2000.0, 2000.0, 2000.0, 2000.0, 2000.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0]
+    mpc_q_diagonal: [20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
     
     # R Penalty (Control Effort)
     # [vx, vy, vz, wx, wy, wz]
-    mpc_r_diagonal: [0.2, 0.2, 0.2, 0.2, 0.2, 0.2]
+    mpc_r_diagonal: [0.002, 0.002, 0.002, 0.002, 0.002, 0.002]
